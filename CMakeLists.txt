@@ -54,10 +54,10 @@ else()
 endif()
 
 # Option to enable CSR5 support (requires AVX512)
-option(ENABLE_CSR5 "Enable CSR5 SpMV support (requires AVX512)" OFF)
+option(ENABLE_CSR5 "Enable CSR5 SpMV support (requires AVX512)" ON)
 
 # Option to enable MKL support
-option(ENABLE_MKL "Enable MKL baseline test support" OFF)
+option(ENABLE_MKL "Enable MKL baseline test support" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
