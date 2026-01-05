@@ -23,7 +23,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_symbolic_omp(
     const IndexType *arpt, const IndexType *acol,
     const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     IndexType *&cpt, IndexType *&ccol, IndexType &c_nnz);
 
 /**
@@ -34,7 +34,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_symbolic_omp_lb(
     const IndexType *arpt, const IndexType *acol,
     const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     IndexType *&cpt, IndexType *&ccol, IndexType &c_nnz,
     SpGEMM_BIN<IndexType, ValueType> *bin);
 
@@ -46,7 +46,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     const IndexType *cpt, const IndexType *ccol, ValueType *cval);
 
 /**
@@ -57,7 +57,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp_lb(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     const IndexType *cpt, const IndexType *ccol, ValueType *cval,
     SpGEMM_BIN<IndexType, ValueType> *bin);
 

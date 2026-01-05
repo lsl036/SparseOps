@@ -54,7 +54,18 @@ IndexType SpGEMM_BIN<IndexType, ValueType>::get_hash_size(IndexType ncols, Index
 {
     IndexType hash_size = min_ht_sz;
     while (hash_size < ncols) {
-        hash_size = hash_size * HASH_SCAL / 100;
+        IndexType new_size = hash_size * HASH_SCAL / 100;
+        // Ensure hash_size actually increases to avoid infinite loop
+        if (new_size <= hash_size) {
+            hash_size = hash_size * 2;  // Double the size if scaling doesn't help
+        } else {
+            hash_size = new_size;
+        }
+        // Safety check: prevent overflow
+        if (hash_size < min_ht_sz) {
+            hash_size = ncols * 2;  // Fallback: use 2x ncols
+            break;
+        }
     }
     return hash_size;
 }

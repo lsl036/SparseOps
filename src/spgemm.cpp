@@ -73,18 +73,19 @@ void LeSpGEMM_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
     }
     
     // Symbolic phase: compute structure of C
+    IndexType b_rows = B.num_rows;  // B.num_rows == A.num_cols
     if (kernel_flag == 1) {
         spgemm_hash_symbolic_omp<IndexType, ValueType>(arpt, acol, brpt, bcol,
-                                  C.num_rows, C.num_cols,
+                                  C.num_rows, C.num_cols, b_rows,
                                   cpt, ccol, c_nnz);
     } else if (kernel_flag == 2) {
         spgemm_hash_symbolic_omp_lb<IndexType, ValueType>(arpt, acol, brpt, bcol,
-                                      C.num_rows, C.num_cols,
+                                      C.num_rows, C.num_cols, b_rows,
                                       cpt, ccol, c_nnz, bin);
     } else {
         // Default: OpenMP (kernel_flag == 1)
         spgemm_hash_symbolic_omp<IndexType, ValueType>(arpt, acol, brpt, bcol,
-                                  C.num_rows, C.num_cols,
+                                  C.num_rows, C.num_cols, b_rows,
                                   cpt, ccol, c_nnz);
     }
     
@@ -97,18 +98,18 @@ void LeSpGEMM_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
     if (kernel_flag == 1) {
         spgemm_hash_numeric_omp<IndexType, ValueType>(arpt, acol, aval,
                                  brpt, bcol, bval,
-                                 C.num_rows, C.num_cols,
+                                 C.num_rows, C.num_cols, b_rows,
                                  cpt, ccol, C.values);
     } else if (kernel_flag == 2) {
         spgemm_hash_numeric_omp_lb<IndexType, ValueType>(arpt, acol, aval,
                                     brpt, bcol, bval,
-                                    C.num_rows, C.num_cols,
+                                    C.num_rows, C.num_cols, b_rows,
                                     cpt, ccol, C.values, bin);
     } else {
         // Default: OpenMP (kernel_flag == 1)
         spgemm_hash_numeric_omp<IndexType, ValueType>(arpt, acol, aval,
                                  brpt, bcol, bval,
-                                 C.num_rows, C.num_cols,
+                                 C.num_rows, C.num_cols, b_rows,
                                  cpt, ccol, C.values);
     }
     

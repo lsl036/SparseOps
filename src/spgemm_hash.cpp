@@ -19,7 +19,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_symbolic_omp(
     const IndexType *arpt, const IndexType *acol,
     const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     IndexType *&cpt, IndexType *&ccol, IndexType &c_nnz)
 {
     int thread_num = Le_get_thread_num();
@@ -47,16 +47,25 @@ void spgemm_hash_symbolic_omp(
         
         for (IndexType j = arpt[i]; j < arpt[i + 1]; j++) {
             IndexType col_a = acol[j];
-            if (col_a >= c_cols) continue;
+            if (col_a >= b_rows) continue;  // col_a must be valid row index in B
             
             for (IndexType k = brpt[col_a]; k < brpt[col_a + 1]; k++) {
                 IndexType col_b = bcol[k];
                 if (col_b >= c_cols) continue;
                 
-                IndexType pos = hash_insert_symbolic(col_b, hash_size, hash_table_id);
-                if (pos != -1 && hash_table_id[pos] == col_b) {
+                // Check if already exists before inserting
+                IndexType pos = hash_find_pos(col_b, hash_size, hash_table_id);
+                if (pos == -1) {
+                    // Hash table full - should not happen with proper sizing
+                    continue;
+                }
+                
+                if (hash_table_id[pos] == -1) {
+                    // New element, insert and count
+                    hash_table_id[pos] = col_b;
                     row_nnz++;
                 }
+                // If hash_table_id[pos] == col_b, element already exists, skip
             }
         }
         
@@ -81,23 +90,43 @@ void spgemm_hash_symbolic_omp(
         // Build hash table for this row
         for (IndexType j = arpt[i]; j < arpt[i + 1]; j++) {
             IndexType col_a = acol[j];
-            if (col_a >= c_cols) continue;
+            if (col_a >= b_rows) continue;  // col_a must be valid row index in B
             
             for (IndexType k = brpt[col_a]; k < brpt[col_a + 1]; k++) {
                 IndexType col_b = bcol[k];
                 if (col_b >= c_cols) continue;
                 
-                hash_insert_symbolic(col_b, hash_size, hash_table_id);
+                // Insert into hash table (only if not already present)
+                IndexType pos = hash_find_pos(col_b, hash_size, hash_table_id);
+                if (pos != -1 && hash_table_id[pos] == -1) {
+                    hash_table_id[pos] = col_b;
+                }
             }
         }
         
-        // Extract unique columns from hash table
+        // Extract unique columns from hash table and sort them
         IndexType ccol_start = cpt[i];
         IndexType ccol_idx = ccol_start;
-        for (IndexType h = 0; h < hash_size && ccol_idx < cpt[i + 1]; h++) {
+        IndexType expected_nnz = cpt[i + 1] - cpt[i];
+        std::vector<IndexType> temp_cols;
+        temp_cols.reserve(expected_nnz);
+        
+        for (IndexType h = 0; h < hash_size; h++) {
             if (hash_table_id[h] != -1) {
-                ccol[ccol_idx++] = hash_table_id[h];
+                temp_cols.push_back(hash_table_id[h]);
             }
+        }
+        
+        // Verify we got the expected number of unique columns
+        if (temp_cols.size() != expected_nnz) {
+            // This should not happen, but handle gracefully
+            // Use the actual count we found
+        }
+        
+        // Sort columns for consistent output
+        std::sort(temp_cols.begin(), temp_cols.end());
+        for (size_t idx = 0; idx < temp_cols.size() && ccol_idx < cpt[i + 1]; idx++) {
+            ccol[ccol_idx++] = temp_cols[idx];
         }
     }
     
@@ -114,7 +143,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_symbolic_omp_lb(
     const IndexType *arpt, const IndexType *acol,
     const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     IndexType *&cpt, IndexType *&ccol, IndexType &c_nnz,
     SpGEMM_BIN<IndexType, ValueType> *bin)
 {
@@ -150,10 +179,19 @@ void spgemm_hash_symbolic_omp_lb(
                     IndexType col_b = bcol[k];
                     if (col_b >= c_cols) continue;
                     
-                    IndexType pos = hash_insert_symbolic(col_b, hash_size, hash_table_id);
-                    if (pos != -1 && hash_table_id[pos] == col_b) {
+                    // Check if already exists before inserting
+                    IndexType pos = hash_find_pos(col_b, hash_size, hash_table_id);
+                    if (pos == -1) {
+                        // Hash table full - should not happen with proper sizing
+                        continue;
+                    }
+                    
+                    if (hash_table_id[pos] == -1) {
+                        // New element, insert and count
+                        hash_table_id[pos] = col_b;
                         row_nnz++;
                     }
+                    // If hash_table_id[pos] == col_b, element already exists, skip
                 }
             }
             
@@ -182,23 +220,42 @@ void spgemm_hash_symbolic_omp_lb(
             // Build hash table for this row
             for (IndexType j = arpt[i]; j < arpt[i + 1]; j++) {
                 IndexType col_a = acol[j];
-                if (col_a >= c_cols) continue;
+                if (col_a >= b_rows) continue;  // col_a must be valid row index in B
                 
                 for (IndexType k = brpt[col_a]; k < brpt[col_a + 1]; k++) {
                     IndexType col_b = bcol[k];
                     if (col_b >= c_cols) continue;
                     
-                    hash_insert_symbolic(col_b, hash_size, hash_table_id);
+                    // Insert into hash table (only if not already present)
+                    IndexType pos = hash_find_pos(col_b, hash_size, hash_table_id);
+                    if (pos != -1 && hash_table_id[pos] == -1) {
+                        hash_table_id[pos] = col_b;
+                    }
                 }
             }
             
-            // Extract unique columns from hash table
+            // Extract unique columns from hash table and sort them
             IndexType ccol_start = cpt[i];
             IndexType ccol_idx = ccol_start;
-            for (IndexType h = 0; h < hash_size && ccol_idx < cpt[i + 1]; h++) {
+            IndexType expected_nnz = cpt[i + 1] - cpt[i];
+            std::vector<IndexType> temp_cols;
+            temp_cols.reserve(expected_nnz);
+            
+            for (IndexType h = 0; h < hash_size; h++) {
                 if (hash_table_id[h] != -1) {
-                    ccol[ccol_idx++] = hash_table_id[h];
+                    temp_cols.push_back(hash_table_id[h]);
                 }
+            }
+            
+            // Verify we got the expected number of unique columns
+            if (temp_cols.size() != expected_nnz) {
+                // This should not happen, but handle gracefully
+            }
+            
+            // Sort columns for consistent output
+            std::sort(temp_cols.begin(), temp_cols.end());
+            for (size_t idx = 0; idx < temp_cols.size() && ccol_idx < cpt[i + 1]; idx++) {
+                ccol[ccol_idx++] = temp_cols[idx];
             }
         }
     }
@@ -212,7 +269,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     const IndexType *cpt, const IndexType *ccol, ValueType *cval)
 {
     int thread_num = Le_get_thread_num();
@@ -244,7 +301,7 @@ void spgemm_hash_numeric_omp(
         for (IndexType j = arpt[i]; j < arpt[i + 1]; j++) {
             IndexType col_a = acol[j];
             ValueType val_a = aval[j];
-            if (col_a >= c_cols) continue;
+            if (col_a >= b_rows) continue;  // col_a must be valid row index in B
             
             for (IndexType k = brpt[col_a]; k < brpt[col_a + 1]; k++) {
                 IndexType col_b = bcol[k];
@@ -281,7 +338,7 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp_lb(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols,
+    IndexType c_rows, IndexType c_cols, IndexType b_rows,
     const IndexType *cpt, const IndexType *ccol, ValueType *cval,
     SpGEMM_BIN<IndexType, ValueType> *bin)
 {
@@ -309,7 +366,7 @@ void spgemm_hash_numeric_omp_lb(
             for (IndexType j = arpt[i]; j < arpt[i + 1]; j++) {
                 IndexType col_a = acol[j];
                 ValueType val_a = aval[j];
-                if (col_a >= c_cols) continue;
+                if (col_a >= b_rows) continue;  // col_a must be valid row index in B
                 
                 for (IndexType k = brpt[col_a]; k < brpt[col_a + 1]; k++) {
                     IndexType col_b = bcol[k];
@@ -371,40 +428,40 @@ void sort_csr_columns(IndexType num_rows,
 
 // Explicit template instantiations
 template void spgemm_hash_symbolic_omp<int, float>(
-    const int*, const int*, const int*, const int*, int, int, int*&, int*&, int&);
+    const int*, const int*, const int*, const int*, int, int, int, int*&, int*&, int&);
 template void spgemm_hash_symbolic_omp<int, double>(
-    const int*, const int*, const int*, const int*, int, int, int*&, int*&, int&);
+    const int*, const int*, const int*, const int*, int, int, int, int*&, int*&, int&);
 template void spgemm_hash_symbolic_omp<long long, float>(
-    const long long*, const long long*, const long long*, const long long*, long long, long long, long long*&, long long*&, long long&);
+    const long long*, const long long*, const long long*, const long long*, long long, long long, long long, long long*&, long long*&, long long&);
 template void spgemm_hash_symbolic_omp<long long, double>(
-    const long long*, const long long*, const long long*, const long long*, long long, long long, long long*&, long long*&, long long&);
+    const long long*, const long long*, const long long*, const long long*, long long, long long, long long, long long*&, long long*&, long long&);
 
 template void spgemm_hash_symbolic_omp_lb<int, float>(
-    const int*, const int*, const int*, const int*, int, int, int*&, int*&, int&, SpGEMM_BIN<int, float>*);
+    const int*, const int*, const int*, const int*, int, int, int, int*&, int*&, int&, SpGEMM_BIN<int, float>*);
 template void spgemm_hash_symbolic_omp_lb<int, double>(
-    const int*, const int*, const int*, const int*, int, int, int*&, int*&, int&, SpGEMM_BIN<int, double>*);
+    const int*, const int*, const int*, const int*, int, int, int, int*&, int*&, int&, SpGEMM_BIN<int, double>*);
 template void spgemm_hash_symbolic_omp_lb<long long, float>(
-    const long long*, const long long*, const long long*, const long long*, long long, long long, long long*&, long long*&, long long&, SpGEMM_BIN<long long, float>*);
+    const long long*, const long long*, const long long*, const long long*, long long, long long, long long, long long*&, long long*&, long long&, SpGEMM_BIN<long long, float>*);
 template void spgemm_hash_symbolic_omp_lb<long long, double>(
-    const long long*, const long long*, const long long*, const long long*, long long, long long, long long*&, long long*&, long long&, SpGEMM_BIN<long long, double>*);
+    const long long*, const long long*, const long long*, const long long*, long long, long long, long long, long long*&, long long*&, long long&, SpGEMM_BIN<long long, double>*);
 
 template void spgemm_hash_numeric_omp<int, float>(
-    const int*, const int*, const float*, const int*, const int*, const float*, int, int, const int*, const int*, float*);
+    const int*, const int*, const float*, const int*, const int*, const float*, int, int, int, const int*, const int*, float*);
 template void spgemm_hash_numeric_omp<int, double>(
-    const int*, const int*, const double*, const int*, const int*, const double*, int, int, const int*, const int*, double*);
+    const int*, const int*, const double*, const int*, const int*, const double*, int, int, int, const int*, const int*, double*);
 template void spgemm_hash_numeric_omp<long long, float>(
-    const long long*, const long long*, const float*, const long long*, const long long*, const float*, long long, long long, const long long*, const long long*, float*);
+    const long long*, const long long*, const float*, const long long*, const long long*, const float*, long long, long long, long long, const long long*, const long long*, float*);
 template void spgemm_hash_numeric_omp<long long, double>(
-    const long long*, const long long*, const double*, const long long*, const long long*, const double*, long long, long long, const long long*, const long long*, double*);
+    const long long*, const long long*, const double*, const long long*, const long long*, const double*, long long, long long, long long, const long long*, const long long*, double*);
 
 template void spgemm_hash_numeric_omp_lb<int, float>(
-    const int*, const int*, const float*, const int*, const int*, const float*, int, int, const int*, const int*, float*, SpGEMM_BIN<int, float>*);
+    const int*, const int*, const float*, const int*, const int*, const float*, int, int, int, const int*, const int*, float*, SpGEMM_BIN<int, float>*);
 template void spgemm_hash_numeric_omp_lb<int, double>(
-    const int*, const int*, const double*, const int*, const int*, const double*, int, int, const int*, const int*, double*, SpGEMM_BIN<int, double>*);
+    const int*, const int*, const double*, const int*, const int*, const double*, int, int, int, const int*, const int*, double*, SpGEMM_BIN<int, double>*);
 template void spgemm_hash_numeric_omp_lb<long long, float>(
-    const long long*, const long long*, const float*, const long long*, const long long*, const float*, long long, long long, const long long*, const long long*, float*, SpGEMM_BIN<long long, float>*);
+    const long long*, const long long*, const float*, const long long*, const long long*, const float*, long long, long long, long long, const long long*, const long long*, float*, SpGEMM_BIN<long long, float>*);
 template void spgemm_hash_numeric_omp_lb<long long, double>(
-    const long long*, const long long*, const double*, const long long*, const long long*, const double*, long long, long long, const long long*, const long long*, double*, SpGEMM_BIN<long long, double>*);
+    const long long*, const long long*, const double*, const long long*, const long long*, const double*, long long, long long, long long, const long long*, const long long*, double*, SpGEMM_BIN<long long, double>*);
 
 template void sort_csr_columns<int, float>(int, const int*, int*, float*);
 template void sort_csr_columns<int, double>(int, const int*, int*, double*);
