@@ -58,6 +58,6 @@ void __spmv_sell_cR_omp_lb_row( const IndexType * Reorder,
  * @param y 
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_sell_c_R(const ValueType alpha, const SELL_C_R_Matrix<IndexType, ValueType>& sell_c_R, const ValueType *x, const ValueType beta, ValueType *y);
+void SpOps_sell_c_R(const ValueType alpha, const SELL_C_R_Matrix<IndexType, ValueType>& sell_c_R, const ValueType *x, const ValueType beta, ValueType *y);
 
 #endif /* SPMV_SELL_C_R_H */

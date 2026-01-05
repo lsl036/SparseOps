@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2023
  * 
  */
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include<iostream>
 
 
@@ -44,13 +44,13 @@ double test_ell_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
     if(0 == ell.kernel_flag){
         std::cout << "\n===  Compared ELL serial with csr default  ===" << std::endl;
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         ell, LeSpMV_ell<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         ell, SpOps_ell<IndexType, ValueType>,
                          "ell_serial_simple");
 
         std::cout << "\n===  Performance of ELL serial simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(ell,LeSpMV_ell<IndexType, ValueType>,"ell_serial_simple");
+        msec_per_iteration = benchmark_spmv_on_host(ell,SpOps_ell<IndexType, ValueType>,"ell_serial_simple");
     }
     else if (1 == ell.kernel_flag)
     {
@@ -68,13 +68,13 @@ double test_ell_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         set_omp_schedule(schedule_mod, chunk_size);
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         ell, LeSpMV_ell<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         ell, SpOps_ell<IndexType, ValueType>,
                          "ell_omp_simple");
 
         std::cout << "\n===  Performance of ELL omp simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(ell, LeSpMV_ell<IndexType, ValueType>,"ell_omp_simple");     
+        msec_per_iteration = benchmark_spmv_on_host(ell, SpOps_ell<IndexType, ValueType>,"ell_omp_simple");     
     }
     else if (2 == ell.kernel_flag)
     {
@@ -88,13 +88,13 @@ double test_ell_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         balanced_partition_row_by_nnz_ell_n2(ell.col_index, ell.num_nnzs, ell.num_rows, ell.max_row_width, thread_num, ell.partition);
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         ell, LeSpMV_ell<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         ell, SpOps_ell<IndexType, ValueType>,
                          "ell_omp_ld");
 
         std::cout << "\n===  Performance of ELL omp Load-Balance  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(ell,LeSpMV_ell<IndexType, ValueType>,"ell_omp_ld");
+        msec_per_iteration = benchmark_spmv_on_host(ell,SpOps_ell<IndexType, ValueType>,"ell_omp_ld");
     }
 
     delete_ell_matrix(ell);

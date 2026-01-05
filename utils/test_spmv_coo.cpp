@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2023
  * 
  */
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include<iostream>
 
 template <typename IndexType, typename ValueType>
@@ -36,13 +36,13 @@ double test_coo_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         std::cout << "\n===  Compared coo serial with csr default  ===" << std::endl;
 
         // test correctness
-        test_spmv_kernel(csr_ref,  LeSpMV_csr<IndexType, ValueType>,
-                         coo_test, LeSpMV_coo<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref,  SpOps_csr<IndexType, ValueType>,
+                         coo_test, SpOps_coo<IndexType, ValueType>,
                          "coo_serial_simple");
 
         std::cout << "\n===  Performance of COO serial simple ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(coo_test,LeSpMV_coo<IndexType, ValueType>,"coo_serial_simple");
+        msec_per_iteration = benchmark_spmv_on_host(coo_test,SpOps_coo<IndexType, ValueType>,"coo_serial_simple");
     }
     else if(1 == kernel_tag){
         std::cout << "\n===  Compared coo omp with csr default  ===" << std::endl;
@@ -57,25 +57,25 @@ double test_coo_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         set_omp_schedule(schedule_mod, chunk_size);
 
         // test correctness
-        test_spmv_kernel(csr_ref,  LeSpMV_csr<IndexType, ValueType>,
-                         coo_test, LeSpMV_coo<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref,  SpOps_csr<IndexType, ValueType>,
+                         coo_test, SpOps_coo<IndexType, ValueType>,
                          "coo_omp_simple");
 
         std::cout << "\n===  Performance of COO omp simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(coo_test,LeSpMV_coo<IndexType, ValueType>,"coo_omp_simple");
+        msec_per_iteration = benchmark_spmv_on_host(coo_test,SpOps_coo<IndexType, ValueType>,"coo_omp_simple");
     }
     else if(2 == kernel_tag){
         std::cout << "\n===  Compared coo alpha implementation with csr default ===" << std::endl;
 
         // test correctness
-        test_spmv_kernel(csr_ref,  LeSpMV_csr<IndexType, ValueType>,
-                         coo_test, LeSpMV_coo<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref,  SpOps_csr<IndexType, ValueType>,
+                         coo_test, SpOps_coo<IndexType, ValueType>,
                          "coo_omp_lb");
 
         std::cout << "\n===  Performance of coo alpha implementation  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host( coo_test, LeSpMV_coo<IndexType, ValueType>,"coo_omp_lb");
+        msec_per_iteration = benchmark_spmv_on_host( coo_test, SpOps_coo<IndexType, ValueType>,"coo_omp_lb");
     }
 
     // *gflops = coo.gflops;

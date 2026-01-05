@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 #include"../include/thread.h"
 
@@ -436,7 +436,7 @@ void spmv_csr5_tail_partition_kernel(const iT           *d_row_pointer,
  * @param y 
  */
 template <typename IndexType, typename UIndexType, typename ValueType>
-void LeSpMV_csr5(const ValueType alpha, const CSR5_Matrix<IndexType, UIndexType, ValueType>& csr5, const ValueType * x, const ValueType beta, ValueType * y)
+void SpOps_csr5(const ValueType alpha, const CSR5_Matrix<IndexType, UIndexType, ValueType>& csr5, const ValueType * x, const ValueType beta, ValueType * y)
 {
     spmv_csr5_compute_kernel
             <IndexType, UIndexType, ValueType>
@@ -456,4 +456,4 @@ void LeSpMV_csr5(const ValueType alpha, const CSR5_Matrix<IndexType, UIndexType,
              csr5.tail_partition_start, csr5._p, csr5.num_rows, csr5.sigma, csr5.omega, alpha, beta);
 }
 
-template void LeSpMV_csr5<int, uint32_t, double>(const double, const CSR5_Matrix<int, uint32_t, double>&, const double* , const double, double*);
+template void SpOps_csr5<int, uint32_t, double>(const double, const CSR5_Matrix<int, uint32_t, double>&, const double* , const double, double*);

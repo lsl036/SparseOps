@@ -9,7 +9,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include<iostream>
 
 template <typename IndexType, typename ValueType>
@@ -40,13 +40,13 @@ double test_dia_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
     if(0 == dia.kernel_flag){
         std::cout << "\n===  Compared DIA serial with csr default  ===" << std::endl;
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         dia, LeSpMV_dia<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         dia, SpOps_dia<IndexType, ValueType>,
                          "dia_serial_simple");
 
         std::cout << "\n===  Performance of DIA serial simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(dia, LeSpMV_dia<IndexType, ValueType>,"dia_serial_simple");
+        msec_per_iteration = benchmark_spmv_on_host(dia, SpOps_dia<IndexType, ValueType>,"dia_serial_simple");
     }
     else if (1 == dia.kernel_flag)
     {
@@ -61,13 +61,13 @@ double test_dia_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         set_omp_schedule(schedule_mod, chunk_size);
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         dia, LeSpMV_dia<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         dia, SpOps_dia<IndexType, ValueType>,
                          "dia_omp_simple");
 
         std::cout << "\n===  Performance of DIA omp simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(dia, LeSpMV_dia<IndexType, ValueType>,"dia_omp_simple");
+        msec_per_iteration = benchmark_spmv_on_host(dia, SpOps_dia<IndexType, ValueType>,"dia_omp_simple");
           
     }
     else if (2 == dia.kernel_flag)
@@ -75,13 +75,13 @@ double test_dia_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         std::cout << "\n===  Compared DIA alpha with csr default  ===" << std::endl;
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         dia, LeSpMV_dia<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         dia, SpOps_dia<IndexType, ValueType>,
                          "dia_alphasparse");
 
         std::cout << "\n===  Performance of DIA omp simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(dia, LeSpMV_dia<IndexType, ValueType>,"dia_alphasparse");
+        msec_per_iteration = benchmark_spmv_on_host(dia, SpOps_dia<IndexType, ValueType>,"dia_alphasparse");
 
     }
 

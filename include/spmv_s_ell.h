@@ -55,6 +55,6 @@ void __spmv_sell_omp_lb_row(const IndexType num_rows,
  * @param y      result vector y
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_sell(const ValueType alpha, const S_ELL_Matrix<IndexType, ValueType>& sell, const ValueType * x, const ValueType beta, ValueType * y);
+void SpOps_sell(const ValueType alpha, const S_ELL_Matrix<IndexType, ValueType>& sell, const ValueType * x, const ValueType beta, ValueType * y);
 
 #endif /* SPMV_S_ELL_H */

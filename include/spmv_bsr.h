@@ -56,6 +56,6 @@ void __spmv_bsr_lb_alpha(   const IndexType blockDimRow,
  * @param y 
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_bsr(const ValueType alpha, const BSR_Matrix<IndexType, ValueType>& bsr, const ValueType *x, const ValueType beta, ValueType *y);
+void SpOps_bsr(const ValueType alpha, const BSR_Matrix<IndexType, ValueType>& bsr, const ValueType *x, const ValueType beta, ValueType *y);
 
 #endif // SPMV_BSR_H

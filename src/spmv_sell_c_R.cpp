@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 #include"../include/thread.h"
 
@@ -187,7 +187,7 @@ void __spmv_sell_cR_omp_lb_row( const IndexType * Reorder,
 }
 
 template <typename IndexType, typename ValueType>
-void LeSpMV_sell_c_R(const ValueType alpha, const SELL_C_R_Matrix<IndexType, ValueType>& sell_c_R, const ValueType *x, const ValueType beta, ValueType *y)
+void SpOps_sell_c_R(const ValueType alpha, const SELL_C_R_Matrix<IndexType, ValueType>& sell_c_R, const ValueType *x, const ValueType beta, ValueType *y)
 {
     if (0 == sell_c_R.kernel_flag)
     {
@@ -210,10 +210,10 @@ void LeSpMV_sell_c_R(const ValueType alpha, const SELL_C_R_Matrix<IndexType, Val
     }
 }
 
-template void LeSpMV_sell_c_R<int, float>(const float alpha, const SELL_C_R_Matrix<int, float>& sell, const float * x, const float beta, float * y);
+template void SpOps_sell_c_R<int, float>(const float alpha, const SELL_C_R_Matrix<int, float>& sell, const float * x, const float beta, float * y);
 
-template void LeSpMV_sell_c_R<int, double>(const double alpha, const SELL_C_R_Matrix<int, double>& sell, const double * x, const double beta, double * y);
+template void SpOps_sell_c_R<int, double>(const double alpha, const SELL_C_R_Matrix<int, double>& sell, const double * x, const double beta, double * y);
 
-template void LeSpMV_sell_c_R<long long, float>(const float alpha, const SELL_C_R_Matrix<long long, float>& sell, const float * x, const float beta, float * y);
+template void SpOps_sell_c_R<long long, float>(const float alpha, const SELL_C_R_Matrix<long long, float>& sell, const float * x, const float beta, float * y);
 
-template void LeSpMV_sell_c_R<long long, double>(const double alpha, const SELL_C_R_Matrix<long long, double>& sell, const double * x, const double beta, double * y);
+template void SpOps_sell_c_R<long long, double>(const double alpha, const SELL_C_R_Matrix<long long, double>& sell, const double * x, const double beta, double * y);

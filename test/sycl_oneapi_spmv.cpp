@@ -15,8 +15,8 @@
 
 #include<iostream>
 #include<cstdio>
-#include"../LeSpMV/include/LeSpMV.h"
-#include"../LeSpMV/include/cmdline.h"
+#include"../include/SpOps.h"
+#include"../include/cmdline.h"
 
 #include "../common/common_for_examples.hpp"
 #include "common_for_sparse_examples.hpp"

@@ -100,27 +100,27 @@ if(NOT ENABLE_CSR5)
 endif()
 
 # Create the static library
-add_library(SpOPs_static STATIC ${LIB_SOURCES} ${LIB_UTILS})
+add_library(SpOps_static STATIC ${LIB_SOURCES} ${LIB_UTILS})
 
 # Create the shared library
-add_library(SpOPs_shared SHARED ${LIB_SOURCES} ${LIB_UTILS})
+add_library(SpOps_shared SHARED ${LIB_SOURCES} ${LIB_UTILS})
 
 # Link OpenMP to libraries if available
 if(OpenMP_CXX_FOUND)
-    target_link_libraries(SpOPs_static PUBLIC OpenMP::OpenMP_CXX)
-    target_link_libraries(SpOPs_shared PUBLIC OpenMP::OpenMP_CXX)
+    target_link_libraries(SpOps_static PUBLIC OpenMP::OpenMP_CXX)
+    target_link_libraries(SpOps_shared PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
 # It's common practice to output libraries with the same name, with different extensions.
 # CMake automatically appends the appropriate extension for static (.a) and shared (.so or .dll) libraries.
-set_target_properties(SpOPs_shared PROPERTIES OUTPUT_NAME SpOPs)
-set_target_properties(SpOPs_static PROPERTIES OUTPUT_NAME SpOPs)
+set_target_properties(SpOps_shared PROPERTIES OUTPUT_NAME SpOps)
+set_target_properties(SpOps_static PROPERTIES OUTPUT_NAME SpOps)
 
 # 定义源脚本目录和目标脚本目录变量
 set(SOURCE_SCRIPT_DIR ${CMAKE_SOURCE_DIR}/script)
 set(DESTINATION_SCRIPT_DIR ${CMAKE_BINARY_DIR})
 
-add_custom_command(TARGET SpOPs_static POST_BUILD
+add_custom_command(TARGET SpOps_static POST_BUILD
                   COMMAND ${CMAKE_COMMAND} -E copy_directory
                           ${SOURCE_SCRIPT_DIR} ${DESTINATION_SCRIPT_DIR}
                   COMMENT "Copying scripts to build directory")
@@ -149,7 +149,7 @@ foreach(test_src ${TEST_SOURCES})
   # Add compiler options here if they are specific to the test executables
   target_compile_options(${test_name} PRIVATE -O3 -Wall)
 
-  # target_link_libraries(${test_name} SpOPs_shared stdc++)
+  # target_link_libraries(${test_name} SpOps_shared stdc++)
   
   # Check if the current source file is the baseline MKL test
   if(${test_name} STREQUAL "baseline_mkl_csr")
@@ -157,14 +157,14 @@ foreach(test_src ${TEST_SOURCES})
     # This example assumes you're using the Intel Compiler or you have MKL setup to integrate with CMake.
     if(ENABLE_MKL)
       find_package(MKL CONFIG REQUIRED)
-      target_link_libraries(${test_name} MKL::MKL SpOPs_shared stdc++)
+      target_link_libraries(${test_name} MKL::MKL SpOps_shared stdc++)
     else()
       message(WARNING "baseline_mkl_csr test requires ENABLE_MKL=ON, skipping...")
       # This should not happen as we already filtered it out, but just in case
-      target_link_libraries(${test_name} SpOPs_shared stdc++)
+      target_link_libraries(${test_name} SpOps_shared stdc++)
     endif()
   else()
-    target_link_libraries(${test_name} SpOPs_shared stdc++)
+    target_link_libraries(${test_name} SpOps_shared stdc++)
     # Link OpenMP to test executables if available
     if(OpenMP_CXX_FOUND)
         target_link_libraries(${test_name} OpenMP::OpenMP_CXX)

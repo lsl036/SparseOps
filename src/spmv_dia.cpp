@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 template <typename IndexType, typename ValueType>
 void __spmv_dia_serial_simple(  const ValueType alpha, 
@@ -174,7 +174,7 @@ void __spmv_dia_alpha(  const ValueType alpha,
 }
 
 template <typename IndexType, typename ValueType>
-void LeSpMV_dia(const ValueType alpha, const DIA_Matrix<IndexType, ValueType>& dia, const ValueType * x, const ValueType beta, ValueType * y)
+void SpOps_dia(const ValueType alpha, const DIA_Matrix<IndexType, ValueType>& dia, const ValueType * x, const ValueType beta, ValueType * y)
 {
     if ( 0 == dia.kernel_flag)
     {
@@ -196,10 +196,10 @@ void LeSpMV_dia(const ValueType alpha, const DIA_Matrix<IndexType, ValueType>& d
     }
 }
 
-template void LeSpMV_dia<int, float>(const float, const DIA_Matrix<int, float>&, const float*, const float, float*);
+template void SpOps_dia<int, float>(const float, const DIA_Matrix<int, float>&, const float*, const float, float*);
 
-template void LeSpMV_dia<int, double>(const double, const DIA_Matrix<int, double>&, const double*, const double, double*);
+template void SpOps_dia<int, double>(const double, const DIA_Matrix<int, double>&, const double*, const double, double*);
 
-template void LeSpMV_dia<long long, float>(const float, const DIA_Matrix<long long, float>&, const float*, const float, float*);
+template void SpOps_dia<long long, float>(const float, const DIA_Matrix<long long, float>&, const float*, const float, float*);
 
-template void LeSpMV_dia<long long, double>(const double, const DIA_Matrix<long long, double>&, const double*, const double, double*);
+template void SpOps_dia<long long, double>(const double, const DIA_Matrix<long long, double>&, const double*, const double, double*);

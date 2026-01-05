@@ -10,7 +10,7 @@
  */
 #include<iostream>
 #include<cstdio>
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include"../include/cmdline.h"
 
 int main(int argc, char** argv)

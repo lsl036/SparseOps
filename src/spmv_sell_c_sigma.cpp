@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 #include"../include/thread.h"
 
@@ -187,7 +187,7 @@ void __spmv_sell_cs_omp_lb_row( const IndexType * Reorder,
 }
 
 template <typename IndexType, typename ValueType>
-void LeSpMV_sell_c_sigma(const ValueType alpha, const SELL_C_Sigma_Matrix<IndexType, ValueType>& sell_c_sigma, const ValueType *x, const ValueType beta, ValueType *y)
+void SpOps_sell_c_sigma(const ValueType alpha, const SELL_C_Sigma_Matrix<IndexType, ValueType>& sell_c_sigma, const ValueType *x, const ValueType beta, ValueType *y)
 {
     if (0 == sell_c_sigma.kernel_flag)
     {
@@ -210,10 +210,10 @@ void LeSpMV_sell_c_sigma(const ValueType alpha, const SELL_C_Sigma_Matrix<IndexT
     }
 }
 
-template void LeSpMV_sell_c_sigma<int, float>(const float alpha, const SELL_C_Sigma_Matrix<int, float>& sell, const float * x, const float beta, float * y);
+template void SpOps_sell_c_sigma<int, float>(const float alpha, const SELL_C_Sigma_Matrix<int, float>& sell, const float * x, const float beta, float * y);
 
-template void LeSpMV_sell_c_sigma<int, double>(const double alpha, const SELL_C_Sigma_Matrix<int, double>& sell, const double * x, const double beta, double * y);
+template void SpOps_sell_c_sigma<int, double>(const double alpha, const SELL_C_Sigma_Matrix<int, double>& sell, const double * x, const double beta, double * y);
 
-template void LeSpMV_sell_c_sigma<long long, float>(const float alpha, const SELL_C_Sigma_Matrix<long long, float>& sell, const float * x, const float beta, float * y);
+template void SpOps_sell_c_sigma<long long, float>(const float alpha, const SELL_C_Sigma_Matrix<long long, float>& sell, const float * x, const float beta, float * y);
 
-template void LeSpMV_sell_c_sigma<long long, double>(const double alpha, const SELL_C_Sigma_Matrix<long long, double>& sell, const double * x, const double beta, double * y);
+template void SpOps_sell_c_sigma<long long, double>(const double alpha, const SELL_C_Sigma_Matrix<long long, double>& sell, const double * x, const double beta, double * y);

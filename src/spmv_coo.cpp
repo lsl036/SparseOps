@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 #include <thread.h>
 
@@ -158,7 +158,7 @@ void __spmv_coo_omp_alpha (    const IndexType num_rows,
 
 
 template <typename IndexType, typename ValueType>
-void LeSpMV_coo(const ValueType alpha, const COO_Matrix<IndexType, ValueType>& coo, const ValueType * x, const ValueType beta, ValueType * y)
+void SpOps_coo(const ValueType alpha, const COO_Matrix<IndexType, ValueType>& coo, const ValueType * x, const ValueType beta, ValueType * y)
 {
     if (0 == coo.kernel_flag){
         __spmv_coo_serial_simple(coo.num_rows, coo.num_nnzs, alpha, coo.row_index, coo.col_index, coo.values, x, beta, y);
@@ -181,10 +181,10 @@ void LeSpMV_coo(const ValueType alpha, const COO_Matrix<IndexType, ValueType>& c
     }
 }
 
-template void LeSpMV_coo<int, float>(const float, const COO_Matrix<int, float>&, const float* , const float, float*);
+template void SpOps_coo<int, float>(const float, const COO_Matrix<int, float>&, const float* , const float, float*);
 
-template void LeSpMV_coo<int, double>(const double, const COO_Matrix<int, double>&, const double* , const double, double*);
+template void SpOps_coo<int, double>(const double, const COO_Matrix<int, double>&, const double* , const double, double*);
 
-template void LeSpMV_coo<long long, float>(const float, const COO_Matrix<long long, float>&, const float* , const float, float*);
+template void SpOps_coo<long long, float>(const float, const COO_Matrix<long long, float>&, const float* , const float, float*);
 
-template void LeSpMV_coo<long long, double>(const double, const COO_Matrix<long long, double>&, const double* , const double, double*);
+template void SpOps_coo<long long, double>(const double, const COO_Matrix<long long, double>&, const double* , const double, double*);

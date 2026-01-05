@@ -17,7 +17,7 @@
  * @param y      result vector y
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_dia(const ValueType alpha, const DIA_Matrix<IndexType, ValueType>& dia, const ValueType * x, const ValueType beta, ValueType * y);
+void SpOps_dia(const ValueType alpha, const DIA_Matrix<IndexType, ValueType>& dia, const ValueType * x, const ValueType beta, ValueType * y);
 
 template <typename IndexType, typename ValueType>
 void __spmv_dia_serial_simple(  const ValueType alpha, 

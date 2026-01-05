@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2023
  * 
  */
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include<iostream>
 
 template <typename IndexType, typename ValueType>
@@ -38,13 +38,13 @@ double test_s_ell_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref,
     if(0 == sell.kernel_flag){
         std::cout << "\n===  Compared S_ELL serial with csr default  ===" << std::endl;
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         sell, LeSpMV_sell<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         sell, SpOps_sell<IndexType, ValueType>,
                          "sell_serial_simple");
 
         std::cout << "\n===  Performance of S_ELL serial simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(sell, LeSpMV_sell<IndexType, ValueType>,"sell_serial_simple");
+        msec_per_iteration = benchmark_spmv_on_host(sell, SpOps_sell<IndexType, ValueType>,"sell_serial_simple");
     }
     else if (1 == sell.kernel_flag)
     {
@@ -55,13 +55,13 @@ double test_s_ell_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref,
         set_omp_schedule(schedule_mod, chunk_size);
         
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         sell, LeSpMV_sell<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         sell, SpOps_sell<IndexType, ValueType>,
                          "sell_omp_simple");
 
         std::cout << "\n===  Performance of S_ELL omp simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(sell, LeSpMV_sell<IndexType, ValueType>,"sell_omp_simple");     
+        msec_per_iteration = benchmark_spmv_on_host(sell, SpOps_sell<IndexType, ValueType>,"sell_omp_simple");     
     }
     else if (2 == sell.kernel_flag)
     {
@@ -74,13 +74,13 @@ double test_s_ell_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref,
         balanced_partition_row_by_nnz_sell(sell.col_index, sell.num_nnzs, sell.sliceWidth, sell.chunk_num, sell.row_width, thread_num, sell.partition);
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         sell, LeSpMV_sell<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         sell, SpOps_sell<IndexType, ValueType>,
                          "sell_omp_ld");
 
         std::cout << "\n===  Performance of SELL omp Load-Balance  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(sell,LeSpMV_sell<IndexType, ValueType>,"sell_omp_ld");
+        msec_per_iteration = benchmark_spmv_on_host(sell,SpOps_sell<IndexType, ValueType>,"sell_omp_ld");
     }
 
     delete_s_ell_matrix(sell);

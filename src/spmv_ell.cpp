@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 #include"../include/thread.h"
 template <typename IndexType, typename ValueType>
@@ -222,7 +222,7 @@ void __spmv_ell_omp_lb_row( const IndexType num_rows,
  * @param y      result vector y
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_ell(const ValueType alpha, const ELL_Matrix<IndexType, ValueType>& ell, const ValueType * x, const ValueType beta, ValueType * y)
+void SpOps_ell(const ValueType alpha, const ELL_Matrix<IndexType, ValueType>& ell, const ValueType * x, const ValueType beta, ValueType * y)
 {
     if (0 == ell.kernel_flag)
     {
@@ -246,10 +246,10 @@ void LeSpMV_ell(const ValueType alpha, const ELL_Matrix<IndexType, ValueType>& e
     }
 }
 
-template void LeSpMV_ell<int, float>(const float, const ELL_Matrix<int, float>&, const float*, const float, float*);
+template void SpOps_ell<int, float>(const float, const ELL_Matrix<int, float>&, const float*, const float, float*);
 
-template void LeSpMV_ell<int, double>(const double, const ELL_Matrix<int, double>&, const double*, const double, double*);
+template void SpOps_ell<int, double>(const double, const ELL_Matrix<int, double>&, const double*, const double, double*);
 
-template void LeSpMV_ell<long long, float>(const float, const ELL_Matrix<long long, float>&, const float*, const float, float*);
+template void SpOps_ell<long long, float>(const float, const ELL_Matrix<long long, float>&, const float*, const float, float*);
 
-template void LeSpMV_ell<long long, double>(const double, const ELL_Matrix<long long, double>&, const double*, const double, double*);
+template void SpOps_ell<long long, double>(const double, const ELL_Matrix<long long, double>&, const double*, const double, double*);

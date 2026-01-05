@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2024
  * 
  */
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include<iostream>
 
 
@@ -33,14 +33,14 @@ double test_csr5_matrix_kernels(const CSR_Matrix<IndexType, ValueType> &csr_ref,
     {
         std::cout << "\n===  Compared csr5 with csr default  ===" << std::endl;
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                        csr5, LeSpMV_csr5<IndexType, UIndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                        csr5, SpOps_csr5<IndexType, UIndexType, ValueType>,
                         "csr5_AVX512");
 
         std::cout << "\n===  Performance of csr5 (AVX512)  ===" << std::endl;
 
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(csr5, LeSpMV_csr5<IndexType, UIndexType, ValueType>, "csr5_AVX512");
+        msec_per_iteration = benchmark_spmv_on_host(csr5, SpOps_csr5<IndexType, UIndexType, ValueType>, "csr5_AVX512");
     }
     
     delete_csr5_matrix(csr5);

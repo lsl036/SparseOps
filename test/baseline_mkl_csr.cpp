@@ -3,7 +3,7 @@
 #endif
 #include<iostream>
 #include<cstdio>
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include"../include/cmdline.h"
 
 void usage(int argc, char** argv)

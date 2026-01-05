@@ -17,7 +17,7 @@
  * @param y      result vector y
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_coo(const ValueType alpha, const COO_Matrix<IndexType, ValueType>& coo, const ValueType * x, const ValueType beta, ValueType * y);
+void SpOps_coo(const ValueType alpha, const COO_Matrix<IndexType, ValueType>& coo, const ValueType * x, const ValueType beta, ValueType * y);
 
 /**
  * @brief Ai = coo.row_index

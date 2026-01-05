@@ -50,6 +50,6 @@ void __spmv_ell_omp_lb_row( const IndexType num_rows,
  * @param y      result vector y
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_ell(const ValueType alpha, const ELL_Matrix<IndexType, ValueType>& ell, const ValueType * x, const ValueType beta, ValueType * y);
+void SpOps_ell(const ValueType alpha, const ELL_Matrix<IndexType, ValueType>& ell, const ValueType * x, const ValueType beta, ValueType * y);
 
 #endif /* SPMV_ELL_H */

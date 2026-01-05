@@ -10,7 +10,7 @@
  * 
  */
 
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 
 #include"../include/thread.h"
 
@@ -212,7 +212,7 @@ void __spmv_bsr_lb_alpha(   const IndexType blockDimRow,
 }                            
 
 template <typename IndexType, typename ValueType>
-void LeSpMV_bsr(const ValueType alpha, const BSR_Matrix<IndexType, ValueType>& bsr, const ValueType *x, const ValueType beta, ValueType *y)
+void SpOps_bsr(const ValueType alpha, const BSR_Matrix<IndexType, ValueType>& bsr, const ValueType *x, const ValueType beta, ValueType *y)
 {
     if ( 0 == bsr.kernel_flag)
     {
@@ -232,10 +232,10 @@ void LeSpMV_bsr(const ValueType alpha, const BSR_Matrix<IndexType, ValueType>& b
     }
 }
 
-template void LeSpMV_bsr<int, float>(const float alpha, const BSR_Matrix<int, float>& bsr, const float *x, const float beta, float *y);
+template void SpOps_bsr<int, float>(const float alpha, const BSR_Matrix<int, float>& bsr, const float *x, const float beta, float *y);
 
-template void LeSpMV_bsr<int, double>(const double alpha, const BSR_Matrix<int, double>& bsr, const double *x, const double beta, double *y);
+template void SpOps_bsr<int, double>(const double alpha, const BSR_Matrix<int, double>& bsr, const double *x, const double beta, double *y);
 
-template void LeSpMV_bsr<long long, float>(const float alpha, const BSR_Matrix<long long, float>& bsr, const float *x, const float beta, float *y);
+template void SpOps_bsr<long long, float>(const float alpha, const BSR_Matrix<long long, float>& bsr, const float *x, const float beta, float *y);
 
-template void LeSpMV_bsr<long long, double>(const double alpha, const BSR_Matrix<long long, double>& bsr, const double *x, const double beta, double *y);
+template void SpOps_bsr<long long, double>(const double alpha, const BSR_Matrix<long long, double>& bsr, const double *x, const double beta, double *y);

@@ -9,7 +9,7 @@
  * 
  */
 #include <cstdio>
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include "../include/timer.h"
 
 #if 0

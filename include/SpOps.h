@@ -1,5 +1,5 @@
-#ifndef LESPMV_H
-#define LESPMV_H
+#ifndef SPOPS_H
+#define SPOPS_H
 
 // general config
 #include"general_config.h"
@@ -36,5 +36,7 @@
 #include"spmv_sell_c_R.h"
 
 // SpGEMM algorithms
+#include"spgemm.h"
 
-#endif /* LESPMV_H */
+#endif /* SPOPS_H */
+

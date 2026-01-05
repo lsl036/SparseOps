@@ -20,7 +20,7 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
-#include "../include/LeSpMV.h"
+#include "../include/SpOps.h"
 
 #if 0
 

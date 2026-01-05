@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2023
  * 
  */
-#include"../include/LeSpMV.h"
+#include"../include/SpOps.h"
 #include<iostream>
 
 template <typename IndexType, typename ValueType>
@@ -34,13 +34,13 @@ double test_csr_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
     if(0 == kernel_tag){
         std::cout << "\n===  Compared csr serial with csr default  ===" << std::endl;
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         csr_test, LeSpMV_csr<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         csr_test, SpOps_csr<IndexType, ValueType>,
                          "csr_serial_simple");
 
         std::cout << "\n===  Performance of CSR serial simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(csr_test, LeSpMV_csr<IndexType, ValueType>, "csr_serial_simple");
+        msec_per_iteration = benchmark_spmv_on_host(csr_test, SpOps_csr<IndexType, ValueType>, "csr_serial_simple");
     }
     else if(1 == kernel_tag){
         std::cout << "\n===  Compared csr omp with csr default  ===" << std::endl;
@@ -54,13 +54,13 @@ double test_csr_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         set_omp_schedule(schedule_mod, chunk_size);
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         csr_test, LeSpMV_csr<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         csr_test, SpOps_csr<IndexType, ValueType>,
                          "csr_omp_simple");
 
         std::cout << "\n===  Performance of CSR omp simple  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(csr_test, LeSpMV_csr<IndexType, ValueType>, "csr_omp_simple");
+        msec_per_iteration = benchmark_spmv_on_host(csr_test, SpOps_csr<IndexType, ValueType>, "csr_omp_simple");
     }
     else if(2 == kernel_tag){
         std::cout << "\n===  Compared csr_lb_nnz with csr default  ===" << std::endl;
@@ -72,13 +72,13 @@ double test_csr_matrix_kernels(const CSR_Matrix<IndexType,ValueType> &csr_ref, i
         balanced_partition_row_by_nnz(csr_test.row_offset, csr_test.num_rows, thread_num, csr_test.partition);
 
         // test correctness
-        test_spmv_kernel(csr_ref, LeSpMV_csr<IndexType, ValueType>,
-                         csr_test, LeSpMV_csr<IndexType, ValueType>,
+        test_spmv_kernel(csr_ref, SpOps_csr<IndexType, ValueType>,
+                         csr_test, SpOps_csr<IndexType, ValueType>,
                          "csr_omp_lb_nnz");
 
         std::cout << "\n===  Performance of CSR_lb_nnz  ===" << std::endl;
         // count performance of Gflops and Gbytes
-        msec_per_iteration = benchmark_spmv_on_host(csr_test, LeSpMV_csr<IndexType, ValueType>, "csr_omp_lb_nnz");
+        msec_per_iteration = benchmark_spmv_on_host(csr_test, SpOps_csr<IndexType, ValueType>, "csr_omp_lb_nnz");
     
     }
 

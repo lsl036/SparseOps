@@ -17,7 +17,7 @@
  * @param y      result vector y
  */
 template <typename IndexType, typename ValueType>
-void LeSpMV_csr(const ValueType alpha, const CSR_Matrix<IndexType, ValueType>& csr, const ValueType * x, const ValueType beta, ValueType * y);
+void SpOps_csr(const ValueType alpha, const CSR_Matrix<IndexType, ValueType>& csr, const ValueType * x, const ValueType beta, ValueType * y);
 
 /**
  * @brief Ap = csr.row_offest

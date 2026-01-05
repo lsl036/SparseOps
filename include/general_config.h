@@ -1,7 +1,8 @@
 #ifndef GENERAL_CONFIG_H
 #define GENERAL_CONFIG_H
+
 ////////////////////////////////////////////////////////////////
-//   General defines
+//   General defines for SpMV
 ////////////////////////////////////////////////////////////////
 
 // experimental setting
@@ -36,6 +37,17 @@
 #endif // !KERNEL_FLAG
 
 
+// =======================================================
+//   specific parameters for SpGEMM
+// =======================================================
+#define HASH_SCAL 107              // Hash table scaling factor
+#define MIN_HT_S 8                 // Minimum hash table size (symbolic phase)
+#define MIN_HT_N 8                 // Minimum hash table size (numeric phase)
+#define SMALL_THRESHOLD 100        // Threshold for inplace update
+#define VEC_LENGTH 8               // Vectorization length for AVX2
+#define VEC_LENGTH_BIT 3           // log2(VEC_LENGTH)
+#define VEC_LENGTH_LONG 4          // For long long int
+#define VEC_LENGTH_LONG_BIT 2      // log2(VEC_LENGTH_LONG)
 
 // =======================================================
 //   OMP Scheduling strategy: stcont, static or dynamic

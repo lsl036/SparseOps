@@ -4,7 +4,7 @@
 #include "sparse_format.h"
 
 template <typename IndexType, typename UIndexType, typename ValueType>
-void LeSpMV_csr5(const ValueType alpha, const CSR5_Matrix<IndexType, UIndexType, ValueType>& csr5, const ValueType * x, const ValueType beta, ValueType * y);
+void SpOps_csr5(const ValueType alpha, const CSR5_Matrix<IndexType, UIndexType, ValueType>& csr5, const ValueType * x, const ValueType beta, ValueType * y);
 
 template<typename iT, typename uiT, typename vT>
 void spmv_csr5_compute_kernel(const iT           *d_column_index,

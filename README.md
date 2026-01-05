@@ -10,10 +10,10 @@ The parallelism of these SpMV algorithms are achieved by OpenMP, the SIMD optimi
 ## Repository Structure
 
 
-### LeSPMV
+### SpOps
 This library is designed for different platforms. It can auto-detect the hardware information and write the configurations into `./include/plat_config.h`. The code structure is:
 
-`include`: Contains the head files for LeSpMV library. 
+`include`: Contains the head files for SpOps library. 
 
 `src`: Contains different SpMV kernels implementations.
 
@@ -26,7 +26,7 @@ This library is designed for different platforms. It can auto-detect the hardwar
 ## Compilation and Installation
 Typically, SSpMV library is easy to install. Please follow the steps:
 ```
-cd LeSpMV
+cd SparseOps
 mkdir build && cd build
 cmake ..
 make
