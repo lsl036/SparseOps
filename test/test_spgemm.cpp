@@ -3,7 +3,7 @@
  * @author Shengle Lin (lsl036@hnu.edu.cn)
  * @brief Test program for SpGEMM correctness and performance
  * @version 0.1
- * @date 2024
+ * @date 2026
  */
 
 #include "../include/SpOps.h"
@@ -246,7 +246,7 @@ void run_spgemm_test(int argc, char **argv)
     }
     
     // Parse test_type
-    const char *test_type = "correctness";
+    const char *test_type = "performance";
     char *test_type_str = get_argval(argc, argv, "test_type");
     if(test_type_str != NULL) {
         test_type = test_type_str;

@@ -47,14 +47,14 @@ void spgemm_hash_symbolic_omp_lb(
         
         IndexType *check = bin->local_hash_table_id[tid];
         
-        // Get hash table size for this thread (shared across all rows)
-        IndexType ht_size = bin->hash_table_size[tid];
-        
         for (IndexType i = start_row; i < end_row; ++i) {
             IndexType nz = 0;
             IndexType bid = bin->bin_id[i];
             
             if (bid > 0) {
+                // Calculate hash table size for this row based on bin_id (matching reference)
+                IndexType ht_size = MIN_HT_S << (bid - 1);
+                
                 // Clear hash table efficiently using memset (faster than loop)
                 std::memset(check, -1, ht_size * sizeof(IndexType));
                 
@@ -115,12 +115,14 @@ void spgemm_hash_numeric_omp_lb(
         
         IndexType *ht_check = bin->local_hash_table_id[tid];
         ValueType *ht_value = bin->local_hash_table_val[tid];
-        IndexType ht_size = bin->hash_table_size[tid];
         
         for (IndexType i = start_row; i < end_row; ++i) {
             IndexType bid = bin->bin_id[i];
             if (bid > 0) {
+                // Calculate hash table size for this row based on bin_id (matching reference)
+                IndexType ht_size = MIN_HT_N << (bid - 1);
                 IndexType offset = cpt[i];
+                
                 // Use memset for faster initialization
                 std::memset(ht_check, -1, ht_size * sizeof(IndexType));
                 std::memset(ht_value, 0, ht_size * sizeof(ValueType));
