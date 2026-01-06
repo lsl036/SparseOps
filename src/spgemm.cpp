@@ -87,15 +87,17 @@ void LeSpGEMM_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
     C.col_index = new_array<IndexType>(c_nnz);
     C.values = new_array<ValueType>(c_nnz);
     
-    // Numeric Phase
-    spgemm_hash_numeric_omp_lb<IndexType, ValueType>(arpt, acol, aval,
-                                 brpt, bcol, bval,
-                                 C.num_rows, C.num_cols,
-                                 cpt, C.col_index, C.values, bin);
-    
-    // Sort columns if requested
+    // Numeric Phase (sorting is handled inside numeric phase based on sort_output)
     if (sort_output) {
-        sort_csr_columns(C.num_rows, C.row_offset, C.col_index, C.values);
+        spgemm_hash_numeric_omp_lb<true, IndexType, ValueType>(arpt, acol, aval,
+                                     brpt, bcol, bval,
+                                     C.num_rows, C.num_cols,
+                                     cpt, C.col_index, C.values, bin);
+    } else {
+        spgemm_hash_numeric_omp_lb<false, IndexType, ValueType>(arpt, acol, aval,
+                                      brpt, bcol, bval,
+                                      C.num_rows, C.num_cols,
+                                      cpt, C.col_index, C.values, bin);
     }
     
     // Cleanup

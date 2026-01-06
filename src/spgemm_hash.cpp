@@ -89,10 +89,59 @@ void spgemm_hash_symbolic_omp_lb(
 }
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * @brief Sort function for pairs (matching reference implementation)
+ */
+template <typename IndexType, typename ValueType>
+bool sort_less(const std::pair<IndexType, ValueType> &left, const std::pair<IndexType, ValueType> &right)
+{
+    return left.first < right.first;
+}
+
+/**
+ * @brief After calculating on each hash table, sort them in ascending order if necessary, 
+ *        and then store them as output matrix (matching reference sort_and_store_table2mat)
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+inline void sort_and_store_table2mat(IndexType *ht_check, ValueType *ht_value, 
+                                     IndexType *colids, ValueType *values, 
+                                     IndexType nz, IndexType ht_size, IndexType offset)
+{
+    IndexType index = 0;
+    
+    // Sort elements in ascending order if necessary, and store them as output matrix
+    if (sortOutput) {
+        std::vector<std::pair<IndexType, ValueType>> p_vec(nz);
+        for (IndexType j = 0; j < ht_size; ++j) { // accumulate non-zero entry from hash table
+            if (ht_check[j] != -1) {
+                p_vec[index++] = std::make_pair(ht_check[j], ht_value[j]);
+            }
+        }
+        std::sort(p_vec.begin(), p_vec.end(), sort_less<IndexType, ValueType>); // sort only non-zero elements
+        for (IndexType j = 0; j < index; ++j) { // store the results
+            colids[j] = p_vec[j].first;
+            values[j] = p_vec[j].second;
+        }
+    }
+    else {
+        for (IndexType j = 0; j < ht_size; ++j) {
+            if (ht_check[j] != -1) {
+                colids[index] = ht_check[j];
+                values[index] = ht_value[j];
+                index++;
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Numeric Phase Implementations
 // ============================================================================
 
-template <typename IndexType, typename ValueType>
+template <bool sortOutput, typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp_lb(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
@@ -101,9 +150,9 @@ void spgemm_hash_numeric_omp_lb(
     SpGEMM_BIN<IndexType, ValueType> *bin)
 {
     // Use BIN's hash tables
-    if (bin->local_hash_table_id == nullptr) {
-        bin->create_local_hash_table(c_cols);
-    }
+    // if (bin->local_hash_table_id == nullptr) {
+    //     bin->create_local_hash_table(c_cols);
+    // }
     
     // Numeric phase (matching reference implementation)
     int thread_num = Le_get_thread_num();
@@ -125,7 +174,7 @@ void spgemm_hash_numeric_omp_lb(
                 
                 // Use memset for faster initialization
                 std::memset(ht_check, -1, ht_size * sizeof(IndexType));
-                std::memset(ht_value, 0, ht_size * sizeof(ValueType));
+                // std::memset(ht_value, 0, ht_size * sizeof(ValueType));
                 
                 // union of col-ids of cluster
                 for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {  // A.cols
@@ -155,43 +204,10 @@ void spgemm_hash_numeric_omp_lb(
                 
                 // Extract from hash table and store to output (matching reference sort_and_store_table2mat)
                 IndexType nz = cpt[i + 1] - offset;
-                IndexType index = 0;
-                
-                // Extract non-zero entries from hash table
-                for (IndexType j = 0; j < ht_size; ++j) {
-                    if (ht_check[j] != -1) {
-                        ccol[offset + index] = ht_check[j];
-                        cval[offset + index] = ht_value[j];
-                        index++;
-                    }
-                }
-                
-                // Sort columns if needed (for consistent output)
-                // Note: Reference code uses sortOutput template parameter, we sort by default
-                // Use in-place sort for better performance (avoid creating pairs)
-                if (nz > 1) {
-                    // Create index array for sorting (more efficient than pairs)
-                    std::vector<IndexType> indices(nz);
-                    for (IndexType j = 0; j < nz; ++j) {
-                        indices[j] = j;
-                    }
-                    // Sort indices based on column values
-                    std::sort(indices.begin(), indices.end(),
-                              [&ccol, offset](IndexType a, IndexType b) {
-                                  return ccol[offset + a] < ccol[offset + b];
-                              });
-                    // Reorder columns and values using indices
-                    std::vector<IndexType> temp_col(nz);
-                    std::vector<ValueType> temp_val(nz);
-                    for (IndexType j = 0; j < nz; ++j) {
-                        temp_col[j] = ccol[offset + indices[j]];
-                        temp_val[j] = cval[offset + indices[j]];
-                    }
-                    for (IndexType j = 0; j < nz; ++j) {
-                        ccol[offset + j] = temp_col[j];
-                        cval[offset + j] = temp_val[j];
-                    }
-                }
+                sort_and_store_table2mat<sortOutput, IndexType, ValueType>(
+                    ht_check, ht_value,
+                    ccol + offset, cval + offset,
+                    nz, ht_size, offset);
             }
         }
     }
@@ -241,9 +257,13 @@ template void spgemm_hash_symbolic_omp_lb<int64_t, float>(
 template void spgemm_hash_symbolic_omp_lb<int64_t, double>(
     const int64_t*, const int64_t*, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN<int64_t, double>*);
 
-template void spgemm_hash_numeric_omp_lb<int64_t, float>(
+template void spgemm_hash_numeric_omp_lb<false, int64_t, float>(
     const int64_t*, const int64_t*, const float*, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN<int64_t, float>*);
-template void spgemm_hash_numeric_omp_lb<int64_t, double>(
+template void spgemm_hash_numeric_omp_lb<false, int64_t, double>(
+    const int64_t*, const int64_t*, const double*, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN<int64_t, double>*);
+template void spgemm_hash_numeric_omp_lb<true, int64_t, float>(
+    const int64_t*, const int64_t*, const float*, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN<int64_t, float>*);
+template void spgemm_hash_numeric_omp_lb<true, int64_t, double>(
     const int64_t*, const int64_t*, const double*, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN<int64_t, double>*);
 
 template void sort_csr_columns<int64_t, float>(int64_t, const int64_t*, int64_t*, float*);

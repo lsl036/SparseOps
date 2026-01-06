@@ -32,7 +32,7 @@ void spgemm_hash_symbolic_omp_lb(
  * @brief Numeric phase: compute values of C = A * B
  *        OpenMP with load balancing using BIN
  */
-template <typename IndexType, typename ValueType>
+template <bool sortOutput, typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp_lb(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
