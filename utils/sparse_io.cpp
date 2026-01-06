@@ -83,8 +83,10 @@ COO_Matrix<IndexType,ValueType> read_coo_matrix(const char * mm_filename)
         {
             if constexpr(std::is_same<IndexType, int>::value) {
                 assert(fscanf(fid,"%d %d\n", &(coo.row_index[i]), &(coo.col_index[i])) == 2);
-            } else if constexpr(std::is_same<IndexType, long long>::value) {
-                assert(fscanf(fid,"%lld %lld\n", &(coo.row_index[i]), &(coo.col_index[i])) == 2);
+            } else {
+                // For int64_t (which may be long or long long), use %ld or %lld
+                // Use %ld for both long and long long (works on most systems)
+                assert(fscanf(fid,"%ld %ld\n", &(coo.row_index[i]), &(coo.col_index[i])) == 2);
             }
             // adjust from 1-based to 0-based indexing
             --coo.row_index[i];
@@ -98,8 +100,10 @@ COO_Matrix<IndexType,ValueType> read_coo_matrix(const char * mm_filename)
 
             if constexpr(std::is_same<IndexType, int>::value) {
                 assert(fscanf(fid, "%d %d %lf\n", &row_id, &col_id, &V) == 3);
-            } else if constexpr(std::is_same<IndexType, long long>::value) {
-                assert(fscanf(fid, "%lld %lld %lf\n", &row_id, &col_id, &V) == 3);
+            } else {
+                // For int64_t (which may be long or long long), use %ld or %lld
+                // Use %ld for both long and long long (works on most systems)
+                assert(fscanf(fid, "%ld %ld %lf\n", &row_id, &col_id, &V) == 3);
             }
 
             coo.row_index[i] = (IndexType) row_id - 1;
@@ -162,10 +166,14 @@ COO_Matrix<IndexType,ValueType> read_coo_matrix(const char * mm_filename)
     return coo;
 }
 
+#include <cstdint>
 template COO_Matrix<int, float> read_coo_matrix<int, float>(const char * mm_filename);
 template COO_Matrix<int, double> read_coo_matrix<int, double>(const char * mm_filename);
 template COO_Matrix<long long, float> read_coo_matrix<long long, float>(const char * mm_filename);
 template COO_Matrix<long long, double> read_coo_matrix<long long, double>(const char * mm_filename);
+// Add int64_t instantiations (int64_t may be long or long long depending on platform)
+template COO_Matrix<int64_t, float> read_coo_matrix<int64_t, float>(const char * mm_filename);
+template COO_Matrix<int64_t, double> read_coo_matrix<int64_t, double>(const char * mm_filename);
 
 /**
  * @brief Read sparse matrix in CSR format from ".mtx" format file.
@@ -207,6 +215,9 @@ template CSR_Matrix<int, float> read_csr_matrix<int, float>(const char * mm_file
 template CSR_Matrix<int, double> read_csr_matrix<int, double>(const char * mm_filename, bool);
 template CSR_Matrix<long long, float> read_csr_matrix<long long, float>(const char * mm_filename, bool);
 template CSR_Matrix<long long, double> read_csr_matrix<long long, double>(const char * mm_filename, bool);
+// Add int64_t instantiations (int64_t may be long or long long depending on platform)
+template CSR_Matrix<int64_t, float> read_csr_matrix<int64_t, float>(const char * mm_filename, bool);
+template CSR_Matrix<int64_t, double> read_csr_matrix<int64_t, double>(const char * mm_filename, bool);
 
 
 template <class IndexType, class ValueType>

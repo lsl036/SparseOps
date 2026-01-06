@@ -145,14 +145,11 @@ void SpGEMM_BIN<IndexType, ValueType>::set_rows_offset(IndexType nrows)
     #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        // Safety check: ensure tid is within valid range
-        if (tid < thread_num) {
-            IndexType target_work = average_work * (tid + 1);
-            
-            // Binary search for the row index
-            IndexType *pos = std::lower_bound(ps_row_nz, ps_row_nz + nrows + 1, target_work);
-            rows_offset[tid + 1] = static_cast<IndexType>(pos - ps_row_nz);
-        }
+        IndexType target_work = average_work * (tid + 1);
+        
+        // Binary search for the row index
+        IndexType *pos = std::lower_bound(ps_row_nz, ps_row_nz + nrows + 1, target_work);
+        rows_offset[tid + 1] = static_cast<IndexType>(pos - ps_row_nz);
     }
     rows_offset[thread_num] = nrows;
     
@@ -227,40 +224,32 @@ void SpGEMM_BIN<IndexType, ValueType>::create_local_hash_table(IndexType max_col
     #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        // Safety check: ensure tid is within valid range
-        if (tid < thread_num) {
-            IndexType ht_size = 0;
-            
-            // Get max hash table size needed for this thread's rows
-            if (rows_offset != nullptr) {
-                // Safety check: ensure rows_offset indices are valid
-                if (tid + 1 <= thread_num) {
-                    for (IndexType j = rows_offset[tid]; j < rows_offset[tid + 1]; ++j) {
-                        if (ht_size < row_nz[j]) ht_size = row_nz[j];
-                    }
-                }
-            }
-            
-            // Align to power of 2 (2^n)
-            if (ht_size > 0) {
-                if (ht_size > max_cols) ht_size = max_cols;
-                IndexType k = min_ht_size;
-                while (k < ht_size) {
-                    k <<= 1;
-                }
-                ht_size = k;
-            } else {
-                ht_size = min_ht_size;
-            }
-            
-            hash_table_size[tid] = ht_size;
-            local_hash_table_id[tid] = new_array<IndexType>(ht_size);
-            local_hash_table_val[tid] = new_array<ValueType>(ht_size);
-            
-            // Initialize hash table
-            std::fill_n(local_hash_table_id[tid], ht_size, static_cast<IndexType>(-1));
-            std::fill_n(local_hash_table_val[tid], ht_size, static_cast<ValueType>(0));
+        IndexType ht_size = 0;
+        
+        // Get max hash table size needed for this thread's rows
+        for (IndexType j = rows_offset[tid]; j < rows_offset[tid + 1]; ++j) {
+            if (ht_size < row_nz[j]) ht_size = row_nz[j];
         }
+        
+        // Align to power of 2 (2^n)
+        if (ht_size > 0) {
+            if (ht_size > max_cols) ht_size = max_cols;
+            IndexType k = min_ht_size;
+            while (k < ht_size) {
+                k <<= 1;
+            }
+            ht_size = k;
+        } else {
+            ht_size = min_ht_size;
+        }
+        
+        hash_table_size[tid] = ht_size;
+        local_hash_table_id[tid] = new_array<IndexType>(ht_size);
+        local_hash_table_val[tid] = new_array<ValueType>(ht_size);
+        
+        // Initialize hash table
+        std::fill_n(local_hash_table_id[tid], ht_size, static_cast<IndexType>(-1));
+        std::fill_n(local_hash_table_val[tid], ht_size, static_cast<ValueType>(0));
     }
     
     // Update allocated_thread_num after successful allocation
@@ -341,19 +330,16 @@ IndexType hash_insert_numeric(IndexType key, ValueType val, IndexType hash_size,
 }
 
 // Explicit template instantiations
-template class SpGEMM_BIN<int, float>;
-template class SpGEMM_BIN<int, double>;
-template class SpGEMM_BIN<long long, float>;
-template class SpGEMM_BIN<long long, double>;
+// Explicit template instantiations (only int64_t for IndexType)
+#include <cstdint>
 
-template int hash_find_pos<int>(int, int, const int*);
-template long long hash_find_pos<long long>(long long, long long, const long long*);
+template class SpGEMM_BIN<int64_t, float>;
+template class SpGEMM_BIN<int64_t, double>;
 
-template int hash_insert_symbolic<int>(int, int, int*);
-template long long hash_insert_symbolic<long long>(long long, long long, long long*);
+template int64_t hash_find_pos<int64_t>(int64_t, int64_t, const int64_t*);
 
-template int hash_insert_numeric<int, float>(int, float, int, int*, float*);
-template int hash_insert_numeric<int, double>(int, double, int, int*, double*);
-template long long hash_insert_numeric<long long, float>(long long, float, long long, long long*, float*);
-template long long hash_insert_numeric<long long, double>(long long, double, long long, long long*, double*);
+template int64_t hash_insert_symbolic<int64_t>(int64_t, int64_t, int64_t*);
+
+template int64_t hash_insert_numeric<int64_t, float>(int64_t, float, int64_t, int64_t*, float*);
+template int64_t hash_insert_numeric<int64_t, double>(int64_t, double, int64_t, int64_t*, double*);
 

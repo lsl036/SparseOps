@@ -10,9 +10,13 @@
 #include "../include/spgemm.h"
 #include "../include/timer.h"
 #include "../include/cmdline.h"
+#include "../include/sparse_io.h"
+#include "../include/mmio.h"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
+#include <string>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -25,8 +29,7 @@ void usage(int argc, char** argv)
     std::cout << "Usage:\n";
     std::cout << "\t" << argv[0] << " <matrix_A.mtx> <matrix_B.mtx> [options]\n";
     std::cout << "\t" << "Options:\n";
-    std::cout << "\t" << " --Index     = 0 (int:default) or 1 (long long)\n";
-    std::cout << "\t" << " --precision = 32 (float:default) or 64 (double)\n";
+    std::cout << "\t" << " --precision = 32 (float) or 64 (double:default)\n";
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
     std::cout << "\t" << " --test_type = correctness (default) or performance\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
@@ -95,6 +98,51 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
     } else {
         cout << "Basic validation: FAILED" << endl;
     }
+    
+    // Write matrix C to MTX file
+    std::string matA_name = extractFileNameWithoutExtension(matA_path);
+    std::string output_filename = matA_name + "_SpOps.mtx";
+    
+    // Convert CSR to COO for writing
+    COO_Matrix<IndexType, ValueType> coo_C = csr_to_coo(C);
+    
+    // Prepare arrays for mm_write_mtx_crd
+    // Note: MTX format uses 1-based indexing, and mm_write_mtx_crd expects int and double
+    int *I = new int[coo_C.num_nnzs];
+    int *J = new int[coo_C.num_nnzs];
+    double *V = new double[coo_C.num_nnzs];
+    
+    for (IndexType i = 0; i < coo_C.num_nnzs; i++) {
+        I[i] = static_cast<int>(coo_C.row_index[i] + 1);  // Convert to 1-based and int
+        J[i] = static_cast<int>(coo_C.col_index[i] + 1);  // Convert to 1-based and int
+        V[i] = static_cast<double>(coo_C.values[i]);       // Convert to double
+    }
+    
+    // Create MM_typecode for real coordinate sparse matrix
+    MM_typecode matcode;
+    mm_initialize_typecode(&matcode);
+    mm_set_matrix(&matcode);
+    mm_set_coordinate(&matcode);
+    mm_set_real(&matcode);
+    mm_set_general(&matcode);
+    
+    // Write to MTX file
+    int ret = mm_write_mtx_crd(const_cast<char*>(output_filename.c_str()), 
+                                static_cast<int>(C.num_rows), 
+                                static_cast<int>(C.num_cols), 
+                                static_cast<int>(C.num_nnzs),
+                                I, J, V, matcode);
+    
+    if (ret == 0) {
+        cout << "Matrix C written to: " << output_filename << endl;
+    } else {
+        cerr << "Error writing matrix C to file: " << output_filename << endl;
+    }
+    
+    delete[] I;
+    delete[] J;
+    delete[] V;
+    delete_host_matrix(coo_C);
     
     delete_host_matrix(C);
     
@@ -253,8 +301,8 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
     
-    // Parse precision
-    int precision = 32;
+    // Parse precision (default: 64 for double)
+    int precision = 64;
     char * precision_str = get_argval(argc, argv, "precision");
     if(precision_str != NULL)
         precision = atoi(precision_str);
@@ -271,27 +319,16 @@ int main(int argc, char *argv[])
     if(threads_str != NULL)
         Le_set_thread_num(atoi(threads_str));
     
-    // Parse Index
-    int Index = 0;
-    char * Index_str = get_argval(argc, argv, "Index");
-    if(Index_str != NULL)
-        Index = atoi(Index_str);
+    // SpGEMM only supports int64_t for IndexType (fixed)
+    printf("\nUsing %d-bit floating point precision, 64-bit Index (int64_t), threads = %d\n\n", 
+           precision, Le_get_thread_num());
     
-    printf("\nUsing %d-bit floating point precision, %d-bit Index, threads = %d\n\n", 
-           precision, (Index+1)*32, Le_get_thread_num());
-    
-    // Call appropriate template instantiation
-    if (Index == 0 && precision == 32){
-        run_spgemm_test<int, float>(argc, argv);
+    // Call appropriate template instantiation (only int64_t for IndexType)
+    if (precision == 32){
+        run_spgemm_test<int64_t, float>(argc, argv);
     }
-    else if (Index == 0 && precision == 64){
-        run_spgemm_test<int, double>(argc, argv);
-    }
-    else if (Index == 1 && precision == 32){
-        run_spgemm_test<long long, float>(argc, argv);
-    }
-    else if (Index == 1 && precision == 64){
-        run_spgemm_test<long long, double>(argc, argv);
+    else if (precision == 64){
+        run_spgemm_test<int64_t, double>(argc, argv);
     }
     else{
         usage(argc, argv);

@@ -42,48 +42,44 @@ void spgemm_hash_symbolic_omp_lb(
     #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        // Safety check: ensure tid is within valid range and hash table is allocated
-        if (tid < thread_num && bin->local_hash_table_id != nullptr && 
-            bin->local_hash_table_id[tid] != nullptr) {
-            IndexType start_row = bin->rows_offset[tid];
-            IndexType end_row = bin->rows_offset[tid + 1];
+        IndexType start_row = bin->rows_offset[tid];
+        IndexType end_row = bin->rows_offset[tid + 1];
+        
+        IndexType *check = bin->local_hash_table_id[tid];
+        
+        // Get hash table size for this thread (shared across all rows)
+        IndexType ht_size = bin->hash_table_size[tid];
+        
+        for (IndexType i = start_row; i < end_row; ++i) {
+            IndexType nz = 0;
+            IndexType bid = bin->bin_id[i];
             
-            IndexType *check = bin->local_hash_table_id[tid];
-            
-            // Get hash table size for this thread (shared across all rows)
-            IndexType ht_size = bin->hash_table_size[tid];
-            
-            for (IndexType i = start_row; i < end_row; ++i) {
-                IndexType nz = 0;
-                IndexType bid = bin->bin_id[i];
+            if (bid > 0) {
+                // Clear hash table efficiently using memset (faster than loop)
+                std::memset(check, -1, ht_size * sizeof(IndexType));
                 
-                if (bid > 0) {
-                    // Clear hash table efficiently using memset (faster than loop)
-                    std::memset(check, -1, ht_size * sizeof(IndexType));
-                    
-                    for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
-                        IndexType t_acol = acol[j];
-                        for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                            IndexType key = bcol[k];
-                            IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
-                            while (1) {  // Loop for hash probing
-                                if (check[hash] == key) {  // if the key is already inserted, it's ok
-                                    break;
-                                }
-                                else if (check[hash] == -1) {  // if the key has not been inserted yet, then it's added.
-                                    check[hash] = key;
-                                    nz++;
-                                    break;
-                                }
-                                else {  // linear probing: check next entry
-                                    hash = (hash + 1) & (ht_size - 1);  // hash = (hash + 1) % ht_size
-                                }
+                for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
+                    IndexType t_acol = acol[j];
+                    for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
+                        IndexType key = bcol[k];
+                        IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
+                        while (1) {  // Loop for hash probing
+                            if (check[hash] == key) {  // if the key is already inserted, it's ok
+                                break;
+                            }
+                            else if (check[hash] == -1) {  // if the key has not been inserted yet, then it's added.
+                                check[hash] = key;
+                                nz++;
+                                break;
+                            }
+                            else {  // linear probing: check next entry
+                                hash = (hash + 1) & (ht_size - 1);  // hash = (hash + 1) % ht_size
                             }
                         }
                     }
                 }
-                bin->row_nz[i] = nz;
             }
+            bin->row_nz[i] = nz;
         }
     }
     
@@ -114,19 +110,14 @@ void spgemm_hash_numeric_omp_lb(
     #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        // Safety check: ensure tid is within valid range and hash tables are allocated
-        if (tid < thread_num && bin->local_hash_table_id != nullptr && 
-            bin->local_hash_table_id[tid] != nullptr &&
-            bin->local_hash_table_val != nullptr && 
-            bin->local_hash_table_val[tid] != nullptr) {
-            IndexType start_row = bin->rows_offset[tid];
-            IndexType end_row = bin->rows_offset[tid + 1];
-            
-            IndexType *ht_check = bin->local_hash_table_id[tid];
-            ValueType *ht_value = bin->local_hash_table_val[tid];
-            IndexType ht_size = bin->hash_table_size[tid];
-            
-            for (IndexType i = start_row; i < end_row; ++i) {
+        IndexType start_row = bin->rows_offset[tid];
+        IndexType end_row = bin->rows_offset[tid + 1];
+        
+        IndexType *ht_check = bin->local_hash_table_id[tid];
+        ValueType *ht_value = bin->local_hash_table_val[tid];
+        IndexType ht_size = bin->hash_table_size[tid];
+        
+        for (IndexType i = start_row; i < end_row; ++i) {
             IndexType bid = bin->bin_id[i];
             if (bid > 0) {
                 IndexType offset = cpt[i];
@@ -201,7 +192,6 @@ void spgemm_hash_numeric_omp_lb(
                 }
             }
         }
-        }
     }
 }
 
@@ -241,27 +231,19 @@ void sort_csr_columns(IndexType num_rows,
     }
 }
 
-// Explicit template instantiations
-template void spgemm_hash_symbolic_omp_lb<int, float>(
-    const int*, const int*, const int*, const int*, int, int, int*, int&, SpGEMM_BIN<int, float>*);
-template void spgemm_hash_symbolic_omp_lb<int, double>(
-    const int*, const int*, const int*, const int*, int, int, int*, int&, SpGEMM_BIN<int, double>*);
-template void spgemm_hash_symbolic_omp_lb<long long, float>(
-    const long long*, const long long*, const long long*, const long long*, long long, long long, long long*, long long&, SpGEMM_BIN<long long, float>*);
-template void spgemm_hash_symbolic_omp_lb<long long, double>(
-    const long long*, const long long*, const long long*, const long long*, long long, long long, long long*, long long&, SpGEMM_BIN<long long, double>*);
+// Explicit template instantiations (only int64_t for IndexType)
+#include <cstdint>
 
-template void spgemm_hash_numeric_omp_lb<int, float>(
-    const int*, const int*, const float*, const int*, const int*, const float*, int, int, const int*, int*, float*, SpGEMM_BIN<int, float>*);
-template void spgemm_hash_numeric_omp_lb<int, double>(
-    const int*, const int*, const double*, const int*, const int*, const double*, int, int, const int*, int*, double*, SpGEMM_BIN<int, double>*);
-template void spgemm_hash_numeric_omp_lb<long long, float>(
-    const long long*, const long long*, const float*, const long long*, const long long*, const float*, long long, long long, const long long*, long long*, float*, SpGEMM_BIN<long long, float>*);
-template void spgemm_hash_numeric_omp_lb<long long, double>(
-    const long long*, const long long*, const double*, const long long*, const long long*, const double*, long long, long long, const long long*, long long*, double*, SpGEMM_BIN<long long, double>*);
+template void spgemm_hash_symbolic_omp_lb<int64_t, float>(
+    const int64_t*, const int64_t*, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN<int64_t, float>*);
+template void spgemm_hash_symbolic_omp_lb<int64_t, double>(
+    const int64_t*, const int64_t*, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN<int64_t, double>*);
 
-template void sort_csr_columns<int, float>(int, const int*, int*, float*);
-template void sort_csr_columns<int, double>(int, const int*, int*, double*);
-template void sort_csr_columns<long long, float>(long long, const long long*, long long*, float*);
-template void sort_csr_columns<long long, double>(long long, const long long*, long long*, double*);
+template void spgemm_hash_numeric_omp_lb<int64_t, float>(
+    const int64_t*, const int64_t*, const float*, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN<int64_t, float>*);
+template void spgemm_hash_numeric_omp_lb<int64_t, double>(
+    const int64_t*, const int64_t*, const double*, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN<int64_t, double>*);
+
+template void sort_csr_columns<int64_t, float>(int64_t, const int64_t*, int64_t*, float*);
+template void sort_csr_columns<int64_t, double>(int64_t, const int64_t*, int64_t*, double*);
 

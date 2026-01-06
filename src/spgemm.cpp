@@ -9,6 +9,7 @@
 #include "../include/spgemm.h"
 #include "../include/sparse_operation.h"
 #include <cassert>
+#include <cstdint>
 
 template <typename IndexType, typename ValueType>
 long long int get_spgemm_flop(const CSR_Matrix<IndexType, ValueType> &A,
@@ -117,39 +118,23 @@ void LeSpGEMM(const CSR_Matrix<IndexType, ValueType> &A,
     // }
 }
 
-// Explicit template instantiations
-template long long int get_spgemm_flop<int, float>(
-    const CSR_Matrix<int, float>&, const CSR_Matrix<int, float>&);
-template long long int get_spgemm_flop<int, double>(
-    const CSR_Matrix<int, double>&, const CSR_Matrix<int, double>&);
-template long long int get_spgemm_flop<long long, float>(
-    const CSR_Matrix<long long, float>&, const CSR_Matrix<long long, float>&);
-template long long int get_spgemm_flop<long long, double>(
-    const CSR_Matrix<long long, double>&, const CSR_Matrix<long long, double>&);
+// Explicit template instantiations for SpGEMM (only int64_t for IndexType)
+template long long int get_spgemm_flop<int64_t, float>(
+    const CSR_Matrix<int64_t, float>&, const CSR_Matrix<int64_t, float>&);
+template long long int get_spgemm_flop<int64_t, double>(
+    const CSR_Matrix<int64_t, double>&, const CSR_Matrix<int64_t, double>&);
 
-template void LeSpGEMM<int, float>(
-    const CSR_Matrix<int, float>&, const CSR_Matrix<int, float>&,
-    CSR_Matrix<int, float>&, bool, int);
-template void LeSpGEMM<int, double>(
-    const CSR_Matrix<int, double>&, const CSR_Matrix<int, double>&,
-    CSR_Matrix<int, double>&, bool, int);
-template void LeSpGEMM<long long, float>(
-    const CSR_Matrix<long long, float>&, const CSR_Matrix<long long, float>&,
-    CSR_Matrix<long long, float>&, bool, int);
-template void LeSpGEMM<long long, double>(
-    const CSR_Matrix<long long, double>&, const CSR_Matrix<long long, double>&,
-    CSR_Matrix<long long, double>&, bool, int);
+template void LeSpGEMM<int64_t, float>(
+    const CSR_Matrix<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_Matrix<int64_t, float>&, bool, int);
+template void LeSpGEMM<int64_t, double>(
+    const CSR_Matrix<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_Matrix<int64_t, double>&, bool, int);
 
-template void LeSpGEMM_rowwise<int, float>(
-    const CSR_Matrix<int, float>&, const CSR_Matrix<int, float>&,
-    CSR_Matrix<int, float>&, bool, int);
-template void LeSpGEMM_rowwise<int, double>(
-    const CSR_Matrix<int, double>&, const CSR_Matrix<int, double>&,
-    CSR_Matrix<int, double>&, bool, int);
-template void LeSpGEMM_rowwise<long long, float>(
-    const CSR_Matrix<long long, float>&, const CSR_Matrix<long long, float>&,
-    CSR_Matrix<long long, float>&, bool, int);
-template void LeSpGEMM_rowwise<long long, double>(
-    const CSR_Matrix<long long, double>&, const CSR_Matrix<long long, double>&,
-    CSR_Matrix<long long, double>&, bool, int);
+template void LeSpGEMM_rowwise<int64_t, float>(
+    const CSR_Matrix<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_Matrix<int64_t, float>&, bool, int);
+template void LeSpGEMM_rowwise<int64_t, double>(
+    const CSR_Matrix<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_Matrix<int64_t, double>&, bool, int);
 
