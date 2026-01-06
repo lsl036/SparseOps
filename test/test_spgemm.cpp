@@ -13,6 +13,10 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+#include <ctime>
 
 using namespace std;
 
@@ -123,20 +127,36 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
     
     CSR_Matrix<IndexType, ValueType> C;
     
-    // Warmup
+    // Warmup (first execution is excluded from evaluation)
     LeSpGEMM(A, B, C, sortOutput, kernel_flag);
     delete_host_matrix(C);
     
-    // Benchmark
-    anonymouslib_timer timer;
-    timer.start();
+    // Benchmark (matching reference RowSpGEMM.cpp timing)
+    double total_time = 0.0;
     for (int i = 0; i < iterations; i++) {
+        double start, end, msec;
+        #ifdef _OPENMP
+        start = omp_get_wtime();
+        #else
+        start = (double)clock() / CLOCKS_PER_SEC;
+        #endif
+        
         LeSpGEMM(A, B, C, sortOutput, kernel_flag);
+        
+        #ifdef _OPENMP
+        end = omp_get_wtime();
+        #else
+        end = (double)clock() / CLOCKS_PER_SEC;
+        #endif
+        
+        msec = (end - start) * 1000.0;
+        total_time += msec;
+        
+        // Clear C after timing (except for last iteration)
         if (i < iterations - 1) {
             delete_host_matrix(C);
         }
     }
-    double total_time = timer.stop();
     double avg_time = total_time / iterations;
     
     cout << "Average time: " << avg_time << " ms" << endl;
@@ -239,10 +259,9 @@ int main(int argc, char *argv[])
     if(precision_str != NULL)
         precision = atoi(precision_str);
     
-    // 不用超线程
-    // Le_set_thread_num(CPU_SOCKET * CPU_CORES_PER_SOC);
+    // 不用超线程，默认设置为 CPU_SOCKET * CPU_CORES_PER_SOC
     #ifdef CPU_SOCKET
-    Le_set_thread_num(CPU_SOCKET * CPU_CORES_PER_SOC * CPU_HYPER_THREAD);
+    Le_set_thread_num(CPU_SOCKET * CPU_CORES_PER_SOC);
     #else
     Le_set_thread_num(Le_get_core_num());
     #endif

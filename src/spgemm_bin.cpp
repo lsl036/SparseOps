@@ -21,7 +21,7 @@ void scan(const IndexType *input, IndexType *output, IndexType n) {
 
 template <typename IndexType, typename ValueType>
 SpGEMM_BIN<IndexType, ValueType>::SpGEMM_BIN(IndexType nrows, IndexType min_ht_sz)
-    : num_rows(nrows), min_ht_size(min_ht_sz), max_bin_id(0)
+    : num_rows(nrows), min_ht_size(min_ht_sz), max_bin_id(0), allocated_thread_num(0)
 {
     bin_id = new_array<IndexType>(num_rows);
     row_nz = new_array<IndexType>(num_rows);
@@ -42,21 +42,28 @@ SpGEMM_BIN<IndexType, ValueType>::~SpGEMM_BIN()
     delete_array(row_nz);
     delete_array(rows_offset);
     
+    // Free hash table allocations using allocated_thread_num
     if (local_hash_table_id != nullptr) {
-        int thread_num = Le_get_thread_num();
-        for (int i = 0; i < thread_num; i++) {
+        // Use allocated_thread_num to safely free only allocated memory
+        for (int i = 0; i < allocated_thread_num; ++i) {
             if (local_hash_table_id[i] != nullptr) {
                 delete_array(local_hash_table_id[i]);
             }
+        }
+        delete[] local_hash_table_id;
+    }
+    if (local_hash_table_val != nullptr) {
+        // Use allocated_thread_num to safely free only allocated memory
+        for (int i = 0; i < allocated_thread_num; ++i) {
             if (local_hash_table_val[i] != nullptr) {
                 delete_array(local_hash_table_val[i]);
             }
         }
-        delete[] local_hash_table_id;
         delete[] local_hash_table_val;
     }
-    
-    delete_array(hash_table_size);
+    if (hash_table_size != nullptr) {
+        delete_array(hash_table_size);
+    }
 }
 
 template <typename IndexType, typename ValueType>
@@ -110,8 +117,18 @@ void SpGEMM_BIN<IndexType, ValueType>::set_rows_offset(IndexType nrows)
 {
     int thread_num = Le_get_thread_num();
     
-    // Allocate rows_offset if not already allocated
+    // Allocate or reallocate rows_offset based on current thread number
+    // This is critical: if thread number changed, we must reallocate
     if (rows_offset == nullptr) {
+        rows_offset = new_array<IndexType>(thread_num + 1);
+    } else {
+        // Check if we need to reallocate (we can't know the old size exactly,
+        // but we can check if current thread_num would require more space)
+        // For safety, always reallocate if thread_num might have changed
+        // We'll use a simple heuristic: if thread_num > some threshold, reallocate
+        // Actually, the safest approach is to always reallocate when called,
+        // since we don't track the old thread_num
+        delete_array(rows_offset);
         rows_offset = new_array<IndexType>(thread_num + 1);
     }
     
@@ -125,14 +142,17 @@ void SpGEMM_BIN<IndexType, ValueType>::set_rows_offset(IndexType nrows)
     
     // Set rows_offset for each thread
     rows_offset[0] = 0;
-    #pragma omp parallel
+    #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        IndexType target_work = average_work * (tid + 1);
-        
-        // Binary search for the row index
-        IndexType *pos = std::lower_bound(ps_row_nz, ps_row_nz + nrows + 1, target_work);
-        rows_offset[tid + 1] = static_cast<IndexType>(pos - ps_row_nz);
+        // Safety check: ensure tid is within valid range
+        if (tid < thread_num) {
+            IndexType target_work = average_work * (tid + 1);
+            
+            // Binary search for the row index
+            IndexType *pos = std::lower_bound(ps_row_nz, ps_row_nz + nrows + 1, target_work);
+            rows_offset[tid + 1] = static_cast<IndexType>(pos - ps_row_nz);
+        }
     }
     rows_offset[thread_num] = nrows;
     
@@ -167,42 +187,84 @@ void SpGEMM_BIN<IndexType, ValueType>::create_local_hash_table(IndexType max_col
 {
     int thread_num = Le_get_thread_num();
     
+    // Free old allocations if they exist (thread number might have changed)
+    // Always free and reallocate to ensure thread safety
+    if (local_hash_table_id != nullptr) {
+        // Free individual hash tables (safe upper bound: 256 threads)
+        for (int i = 0; i < 256; ++i) {
+            if (local_hash_table_id[i] != nullptr) {
+                delete_array(local_hash_table_id[i]);
+            }
+        }
+        delete[] local_hash_table_id;
+        local_hash_table_id = nullptr;
+    }
+    if (local_hash_table_val != nullptr) {
+        for (int i = 0; i < 256; ++i) {
+            if (local_hash_table_val[i] != nullptr) {
+                delete_array(local_hash_table_val[i]);
+            }
+        }
+        delete[] local_hash_table_val;
+        local_hash_table_val = nullptr;
+    }
+    if (hash_table_size != nullptr) {
+        delete_array(hash_table_size);
+        hash_table_size = nullptr;
+    }
+    
+    // Allocate new arrays with current thread number
     hash_table_size = new_array<IndexType>(thread_num);
     local_hash_table_id = new IndexType*[thread_num];
     local_hash_table_val = new ValueType*[thread_num];
     
-    #pragma omp parallel
+    // Initialize pointers to nullptr
+    for (int i = 0; i < thread_num; ++i) {
+        local_hash_table_id[i] = nullptr;
+        local_hash_table_val[i] = nullptr;
+    }
+    
+    #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        IndexType ht_size = 0;
-        
-        // Get max hash table size needed for this thread's rows
-        if (rows_offset != nullptr) {
-            for (IndexType j = rows_offset[tid]; j < rows_offset[tid + 1]; ++j) {
-                if (ht_size < row_nz[j]) ht_size = row_nz[j];
+        // Safety check: ensure tid is within valid range
+        if (tid < thread_num) {
+            IndexType ht_size = 0;
+            
+            // Get max hash table size needed for this thread's rows
+            if (rows_offset != nullptr) {
+                // Safety check: ensure rows_offset indices are valid
+                if (tid + 1 <= thread_num) {
+                    for (IndexType j = rows_offset[tid]; j < rows_offset[tid + 1]; ++j) {
+                        if (ht_size < row_nz[j]) ht_size = row_nz[j];
+                    }
+                }
             }
-        }
-        
-        // Align to power of 2 (2^n)
-        if (ht_size > 0) {
-            if (ht_size > max_cols) ht_size = max_cols;
-            IndexType k = min_ht_size;
-            while (k < ht_size) {
-                k <<= 1;
+            
+            // Align to power of 2 (2^n)
+            if (ht_size > 0) {
+                if (ht_size > max_cols) ht_size = max_cols;
+                IndexType k = min_ht_size;
+                while (k < ht_size) {
+                    k <<= 1;
+                }
+                ht_size = k;
+            } else {
+                ht_size = min_ht_size;
             }
-            ht_size = k;
-        } else {
-            ht_size = min_ht_size;
+            
+            hash_table_size[tid] = ht_size;
+            local_hash_table_id[tid] = new_array<IndexType>(ht_size);
+            local_hash_table_val[tid] = new_array<ValueType>(ht_size);
+            
+            // Initialize hash table
+            std::fill_n(local_hash_table_id[tid], ht_size, static_cast<IndexType>(-1));
+            std::fill_n(local_hash_table_val[tid], ht_size, static_cast<ValueType>(0));
         }
-        
-        hash_table_size[tid] = ht_size;
-        local_hash_table_id[tid] = new_array<IndexType>(ht_size);
-        local_hash_table_val[tid] = new_array<ValueType>(ht_size);
-        
-        // Initialize hash table
-        std::fill_n(local_hash_table_id[tid], ht_size, static_cast<IndexType>(-1));
-        std::fill_n(local_hash_table_val[tid], ht_size, static_cast<ValueType>(0));
     }
+    
+    // Update allocated_thread_num after successful allocation
+    allocated_thread_num = thread_num;
 }
 
 template <typename IndexType, typename ValueType>

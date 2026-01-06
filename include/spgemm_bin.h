@@ -31,6 +31,7 @@ public:
     IndexType **local_hash_table_id;  // [thread_id][hash_size]
     ValueType **local_hash_table_val; // [thread_id][hash_size]
     IndexType *hash_table_size;      // hash table size for each thread
+    int allocated_thread_num;        // number of threads for which memory was allocated
     
     SpGEMM_BIN(IndexType nrows, IndexType min_ht_sz);
     ~SpGEMM_BIN();

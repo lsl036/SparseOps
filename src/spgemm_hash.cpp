@@ -38,47 +38,52 @@ void spgemm_hash_symbolic_omp_lb(
     }
     
     // Symbolic phase: count nonzeros per row (matching reference hash_symbolic_kernel)
-    #pragma omp parallel
+    int thread_num = Le_get_thread_num();
+    #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        IndexType start_row = bin->rows_offset[tid];
-        IndexType end_row = bin->rows_offset[tid + 1];
-        
-        IndexType *check = bin->local_hash_table_id[tid];
-        
-        // Get hash table size for this thread (shared across all rows)
-        IndexType ht_size = bin->hash_table_size[tid];
-        
-        for (IndexType i = start_row; i < end_row; ++i) {
-            IndexType nz = 0;
-            IndexType bid = bin->bin_id[i];
+        // Safety check: ensure tid is within valid range and hash table is allocated
+        if (tid < thread_num && bin->local_hash_table_id != nullptr && 
+            bin->local_hash_table_id[tid] != nullptr) {
+            IndexType start_row = bin->rows_offset[tid];
+            IndexType end_row = bin->rows_offset[tid + 1];
             
-            if (bid > 0) {
-                // Clear hash table efficiently using memset (faster than loop)
-                std::memset(check, -1, ht_size * sizeof(IndexType));
+            IndexType *check = bin->local_hash_table_id[tid];
+            
+            // Get hash table size for this thread (shared across all rows)
+            IndexType ht_size = bin->hash_table_size[tid];
+            
+            for (IndexType i = start_row; i < end_row; ++i) {
+                IndexType nz = 0;
+                IndexType bid = bin->bin_id[i];
                 
-                for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
-                    IndexType t_acol = acol[j];
-                    for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                        IndexType key = bcol[k];
-                        IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
-                        while (1) {  // Loop for hash probing
-                            if (check[hash] == key) {  // if the key is already inserted, it's ok
-                                break;
-                            }
-                            else if (check[hash] == -1) {  // if the key has not been inserted yet, then it's added.
-                                check[hash] = key;
-                                nz++;
-                                break;
-                            }
-                            else {  // linear probing: check next entry
-                                hash = (hash + 1) & (ht_size - 1);  // hash = (hash + 1) % ht_size
+                if (bid > 0) {
+                    // Clear hash table efficiently using memset (faster than loop)
+                    std::memset(check, -1, ht_size * sizeof(IndexType));
+                    
+                    for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
+                        IndexType t_acol = acol[j];
+                        for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
+                            IndexType key = bcol[k];
+                            IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
+                            while (1) {  // Loop for hash probing
+                                if (check[hash] == key) {  // if the key is already inserted, it's ok
+                                    break;
+                                }
+                                else if (check[hash] == -1) {  // if the key has not been inserted yet, then it's added.
+                                    check[hash] = key;
+                                    nz++;
+                                    break;
+                                }
+                                else {  // linear probing: check next entry
+                                    hash = (hash + 1) & (ht_size - 1);  // hash = (hash + 1) % ht_size
+                                }
                             }
                         }
                     }
                 }
+                bin->row_nz[i] = nz;
             }
-            bin->row_nz[i] = nz;
         }
     }
     
@@ -105,17 +110,23 @@ void spgemm_hash_numeric_omp_lb(
     }
     
     // Numeric phase (matching reference implementation)
-    #pragma omp parallel
+    int thread_num = Le_get_thread_num();
+    #pragma omp parallel num_threads(thread_num)
     {
         int tid = Le_get_thread_id();
-        IndexType start_row = bin->rows_offset[tid];
-        IndexType end_row = bin->rows_offset[tid + 1];
-        
-        IndexType *ht_check = bin->local_hash_table_id[tid];
-        ValueType *ht_value = bin->local_hash_table_val[tid];
-        IndexType ht_size = bin->hash_table_size[tid];
-        
-        for (IndexType i = start_row; i < end_row; ++i) {
+        // Safety check: ensure tid is within valid range and hash tables are allocated
+        if (tid < thread_num && bin->local_hash_table_id != nullptr && 
+            bin->local_hash_table_id[tid] != nullptr &&
+            bin->local_hash_table_val != nullptr && 
+            bin->local_hash_table_val[tid] != nullptr) {
+            IndexType start_row = bin->rows_offset[tid];
+            IndexType end_row = bin->rows_offset[tid + 1];
+            
+            IndexType *ht_check = bin->local_hash_table_id[tid];
+            ValueType *ht_value = bin->local_hash_table_val[tid];
+            IndexType ht_size = bin->hash_table_size[tid];
+            
+            for (IndexType i = start_row; i < end_row; ++i) {
             IndexType bid = bin->bin_id[i];
             if (bid > 0) {
                 IndexType offset = cpt[i];
@@ -189,6 +200,7 @@ void spgemm_hash_numeric_omp_lb(
                     }
                 }
             }
+        }
         }
     }
 }

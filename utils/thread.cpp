@@ -17,6 +17,7 @@ void Le_set_thread_num(const int thread_num)
 {
 #ifdef _OPENMP
     _thread_num = thread_num;
+    omp_set_num_threads(thread_num);  // Also set OpenMP thread number
 #else
     _thread_num = 1;
 #endif
