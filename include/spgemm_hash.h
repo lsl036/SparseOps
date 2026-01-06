@@ -11,43 +11,22 @@
 
 /**
  * @brief Row-wise SpGEMM using hash table method
- *        Kernel 1: OpenMP parallel implementation (default)
- *        Kernel 2: OpenMP with load balancing using BIN
+ *        OpenMP with load balancing using BIN
  */
-
-/**
- * @brief Symbolic phase: compute structure of C = A * B
- *        OpenMP parallel version
- */
-template <typename IndexType, typename ValueType>
-void spgemm_hash_symbolic_omp(
-    const IndexType *arpt, const IndexType *acol,
-    const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols, IndexType b_rows,
-    IndexType *&cpt, IndexType *&ccol, IndexType &c_nnz);
 
 /**
  * @brief Symbolic phase: compute structure of C = A * B
  *        OpenMP with load balancing using BIN
+ *        cpt should be pre-allocated (c_rows + 1 elements)
+ *        This function performs scan internally to compute nnz
  */
 template <typename IndexType, typename ValueType>
 void spgemm_hash_symbolic_omp_lb(
     const IndexType *arpt, const IndexType *acol,
     const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols, IndexType b_rows,
-    IndexType *&cpt, IndexType *&ccol, IndexType &c_nnz,
+    IndexType c_rows, IndexType c_cols,
+    IndexType *cpt, IndexType &c_nnz,
     SpGEMM_BIN<IndexType, ValueType> *bin);
-
-/**
- * @brief Numeric phase: compute values of C = A * B
- *        OpenMP parallel version
- */
-template <typename IndexType, typename ValueType>
-void spgemm_hash_numeric_omp(
-    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
-    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols, IndexType b_rows,
-    const IndexType *cpt, const IndexType *ccol, ValueType *cval);
 
 /**
  * @brief Numeric phase: compute values of C = A * B
@@ -57,8 +36,8 @@ template <typename IndexType, typename ValueType>
 void spgemm_hash_numeric_omp_lb(
     const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols, IndexType b_rows,
-    const IndexType *cpt, const IndexType *ccol, ValueType *cval,
+    IndexType c_rows, IndexType c_cols,
+    const IndexType *cpt, IndexType *ccol, ValueType *cval,
     SpGEMM_BIN<IndexType, ValueType> *bin);
 
 /**

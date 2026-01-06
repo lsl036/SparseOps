@@ -8,6 +8,16 @@
 
 #include "../include/spgemm_bin.h"
 #include <cmath>
+#include <algorithm>
+
+// Helper function: prefix sum (scan)
+template <typename IndexType>
+void scan(const IndexType *input, IndexType *output, IndexType n) {
+    output[0] = 0;
+    for (IndexType i = 1; i < n; i++) {
+        output[i] = output[i - 1] + input[i - 1];
+    }
+}
 
 template <typename IndexType, typename ValueType>
 SpGEMM_BIN<IndexType, ValueType>::SpGEMM_BIN(IndexType nrows, IndexType min_ht_sz)
@@ -88,20 +98,45 @@ void SpGEMM_BIN<IndexType, ValueType>::set_max_bin(
         row_nz[i] = row_nnz;
     }
     
-    // Find max bin ID based on work distribution
-    IndexType max_work = 0;
-    for (IndexType i = 0; i < num_rows; i++) {
-        if (row_nz[i] > max_work) {
-            max_work = row_nz[i];
-        }
+    // Set rows offset for load balancing
+    set_rows_offset(c_rows);
+    
+    // Set bin ID based on estimated work
+    set_bin_id(c_rows, c_cols, min_ht_size);
+}
+
+template <typename IndexType, typename ValueType>
+void SpGEMM_BIN<IndexType, ValueType>::set_rows_offset(IndexType nrows)
+{
+    int thread_num = Le_get_thread_num();
+    
+    // Allocate rows_offset if not already allocated
+    if (rows_offset == nullptr) {
+        rows_offset = new_array<IndexType>(thread_num + 1);
     }
     
-    // Calculate max_bin_id: use logarithmic binning
-    if (max_work > 0) {
-        max_bin_id = static_cast<IndexType>(std::log2(max_work)) + 1;
-    } else {
-        max_bin_id = 1;
+    // Prefix sum of row_nz
+    IndexType *ps_row_nz = new_array<IndexType>(nrows + 1);
+    scan(row_nz, ps_row_nz, nrows + 1);
+    
+    // Calculate average work per thread
+    IndexType total_work = ps_row_nz[nrows];
+    IndexType average_work = (total_work + thread_num - 1) / thread_num;
+    
+    // Set rows_offset for each thread
+    rows_offset[0] = 0;
+    #pragma omp parallel
+    {
+        int tid = Le_get_thread_id();
+        IndexType target_work = average_work * (tid + 1);
+        
+        // Binary search for the row index
+        IndexType *pos = std::lower_bound(ps_row_nz, ps_row_nz + nrows + 1, target_work);
+        rows_offset[tid + 1] = static_cast<IndexType>(pos - ps_row_nz);
     }
+    rows_offset[thread_num] = nrows;
+    
+    delete_array(ps_row_nz);
 }
 
 template <typename IndexType, typename ValueType>
@@ -109,13 +144,20 @@ void SpGEMM_BIN<IndexType, ValueType>::set_bin_id(
     IndexType nrows, IndexType ncols, IndexType min_ht_sz)
 {
     // Assign bin ID based on estimated work (logarithmic binning)
+    // Match reference implementation: while loop instead of log2
     #pragma omp parallel for
     for (IndexType i = 0; i < num_rows; i++) {
-        if (row_nz[i] > 0) {
-            IndexType log_work = static_cast<IndexType>(std::log2(row_nz[i]));
-            bin_id[i] = log_work;
-        } else {
+        IndexType nz_per_row = row_nz[i];
+        if (nz_per_row > ncols) nz_per_row = ncols;
+        
+        if (nz_per_row == 0) {
             bin_id[i] = 0;
+        } else {
+            IndexType j = 0;
+            while (nz_per_row > (min_ht_sz << j)) {
+                j++;
+            }
+            bin_id[i] = j + 1;
         }
     }
 }
@@ -125,23 +167,41 @@ void SpGEMM_BIN<IndexType, ValueType>::create_local_hash_table(IndexType max_col
 {
     int thread_num = Le_get_thread_num();
     
-    IndexType hash_size = get_hash_size(max_cols, min_ht_size);
-    
     hash_table_size = new_array<IndexType>(thread_num);
-    std::fill_n(hash_table_size, thread_num, hash_size);
-    
     local_hash_table_id = new IndexType*[thread_num];
     local_hash_table_val = new ValueType*[thread_num];
     
     #pragma omp parallel
     {
         int tid = Le_get_thread_id();
-        local_hash_table_id[tid] = new_array<IndexType>(hash_size);
-        local_hash_table_val[tid] = new_array<ValueType>(hash_size);
+        IndexType ht_size = 0;
+        
+        // Get max hash table size needed for this thread's rows
+        if (rows_offset != nullptr) {
+            for (IndexType j = rows_offset[tid]; j < rows_offset[tid + 1]; ++j) {
+                if (ht_size < row_nz[j]) ht_size = row_nz[j];
+            }
+        }
+        
+        // Align to power of 2 (2^n)
+        if (ht_size > 0) {
+            if (ht_size > max_cols) ht_size = max_cols;
+            IndexType k = min_ht_size;
+            while (k < ht_size) {
+                k <<= 1;
+            }
+            ht_size = k;
+        } else {
+            ht_size = min_ht_size;
+        }
+        
+        hash_table_size[tid] = ht_size;
+        local_hash_table_id[tid] = new_array<IndexType>(ht_size);
+        local_hash_table_val[tid] = new_array<ValueType>(ht_size);
         
         // Initialize hash table
-        std::fill_n(local_hash_table_id[tid], hash_size, static_cast<IndexType>(-1));
-        std::fill_n(local_hash_table_val[tid], hash_size, static_cast<ValueType>(0));
+        std::fill_n(local_hash_table_id[tid], ht_size, static_cast<IndexType>(-1));
+        std::fill_n(local_hash_table_val[tid], ht_size, static_cast<ValueType>(0));
     }
 }
 
@@ -167,17 +227,17 @@ template <typename IndexType>
 IndexType hash_find_pos(IndexType key, IndexType hash_size,
                         const IndexType *hash_table_id)
 {
-    IndexType pos = hash_func(key, hash_size);
-    IndexType start_pos = pos;
+    IndexType hash = hash_func(key, hash_size);
+    IndexType start_hash = hash;
     
-    while (hash_table_id[pos] != -1 && hash_table_id[pos] != key) {
-        pos = (pos + 1) % hash_size;
-        if (pos == start_pos) {
+    while (hash_table_id[hash] != -1 && hash_table_id[hash] != key) {
+        hash = (hash + 1) & (hash_size - 1);  // hash_size is power of 2, use bitwise AND
+        if (hash == start_hash) {
             return -1; // Hash table full
         }
     }
     
-    return pos;
+    return hash;
 }
 
 template <typename IndexType>

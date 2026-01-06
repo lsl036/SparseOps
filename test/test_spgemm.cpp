@@ -27,11 +27,12 @@ void usage(int argc, char** argv)
     std::cout << "\t" << " --test_type = correctness (default) or performance\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
     std::cout << "\t" << " --kernel    = 1 (OpenMP:default) or 2 (OpenMP with load balancing)\n";
+    std::cout << "\t" << " --sort      = 0 (no sort:default) or 1 (sort output columns)\n";
     std::cout << "Note: Matrix files must be real-valued sparse matrices in the MatrixMarket file format.\n";
 }
 
 template <typename IndexType, typename ValueType>
-void test_spgemm_correctness(const char *matA_path, const char *matB_path, int kernel_flag = 1)
+void test_spgemm_correctness(const char *matA_path, const char *matB_path, int kernel_flag = 1, bool sortOutput = false)
 {
     cout << "========================================" << endl;
     cout << "Testing SpGEMM Correctness" << endl;
@@ -59,7 +60,7 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
     anonymouslib_timer timer;
     
     timer.start();
-    LeSpGEMM(A, B, C, true, kernel_flag);
+    LeSpGEMM(A, B, C, sortOutput, kernel_flag);
     double time = timer.stop();
     
     cout << "C: " << C.num_rows << " x " << C.num_cols << ", nnz: " << C.num_nnzs << endl;
@@ -98,7 +99,7 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
 }
 
 template <typename IndexType, typename ValueType>
-void test_spgemm_performance(const char *matA_path, const char *matB_path, int iterations = 10, int kernel_flag = 1)
+void test_spgemm_performance(const char *matA_path, const char *matB_path, int iterations = 10, int kernel_flag = 1, bool sortOutput = false)
 {
     cout << "========================================" << endl;
     cout << "Testing SpGEMM Performance" << endl;
@@ -123,14 +124,14 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
     CSR_Matrix<IndexType, ValueType> C;
     
     // Warmup
-    LeSpGEMM(A, B, C, true, kernel_flag);
+    LeSpGEMM(A, B, C, sortOutput, kernel_flag);
     delete_host_matrix(C);
     
     // Benchmark
     anonymouslib_timer timer;
     timer.start();
     for (int i = 0; i < iterations; i++) {
-        LeSpGEMM(A, B, C, true, kernel_flag);
+        LeSpGEMM(A, B, C, sortOutput, kernel_flag);
         if (i < iterations - 1) {
             delete_host_matrix(C);
         }
@@ -201,18 +202,27 @@ void run_spgemm_test(int argc, char **argv)
         }
     }
     
+    // Parse sort_output
+    bool sortOutput = false;
+    char *sort_str = get_argval(argc, argv, "sort");
+    if(sort_str != NULL) {
+        int sort_val = atoi(sort_str);
+        sortOutput = (sort_val != 0);
+    }
+    
     cout << "SpGEMM Test Program" << endl;
     cout << "Matrix A: " << matA_path << endl;
     cout << "Matrix B: " << matB_path << endl;
     cout << "Test type: " << test_type << endl;
     cout << "Kernel: " << kernel_flag << endl;
+    cout << "Sort output: " << (sortOutput ? "yes" : "no") << endl;
     cout << "Threads: " << Le_get_thread_num() << endl;
     cout << endl;
     
     if (strcmp(test_type, "performance") == 0) {
-        test_spgemm_performance<IndexType, ValueType>(matA_path, matB_path, iterations, kernel_flag);
+        test_spgemm_performance<IndexType, ValueType>(matA_path, matB_path, iterations, kernel_flag, sortOutput);
     } else {
-        test_spgemm_correctness<IndexType, ValueType>(matA_path, matB_path, kernel_flag);
+        test_spgemm_correctness<IndexType, ValueType>(matA_path, matB_path, kernel_flag, sortOutput);
     }
 }
 
@@ -229,7 +239,8 @@ int main(int argc, char *argv[])
     if(precision_str != NULL)
         precision = atoi(precision_str);
     
-    // Set default thread number (all cores)
+    // 不用超线程
+    // Le_set_thread_num(CPU_SOCKET * CPU_CORES_PER_SOC);
     #ifdef CPU_SOCKET
     Le_set_thread_num(CPU_SOCKET * CPU_CORES_PER_SOC * CPU_HYPER_THREAD);
     #else

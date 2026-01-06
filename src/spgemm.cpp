@@ -26,7 +26,8 @@ long long int get_spgemm_flop(const CSR_Matrix<IndexType, ValueType> &A,
         }
     }
     
-    return flops;
+    // Total number of floating-point operations including addition and multiplication in SpGEMM
+    return (flops * 2);
 }
 
 template <typename IndexType, typename ValueType>
@@ -57,61 +58,39 @@ void LeSpGEMM_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
     const IndexType *bcol = B.col_index;
     const ValueType *bval = B.values;
     
-    IndexType *cpt = nullptr;
-    IndexType *ccol = nullptr;
-    ValueType *cval = nullptr;
+    // Create BIN for load balancing (matching reference RowSpGEMM)
+    SpGEMM_BIN<IndexType, ValueType> *bin = new SpGEMM_BIN<IndexType, ValueType>(A.num_rows, MIN_HT_S);
+    
+    // Set max bin (calls set_intprod_num, set_rows_offset, set_bin_id)
+    bin->set_max_bin(arpt, acol, brpt, C.num_rows, C.num_cols);
+    
+    // Create hash table (thread local)
+    bin->create_local_hash_table(C.num_cols);
+    
+    // Allocate row pointer (matching reference RowSpGEMM: c.rowptr = my_malloc<IT>(c.rows + 1))
+    IndexType *cpt = new_array<IndexType>(C.num_rows + 1);
     IndexType c_nnz = 0;
     
-    // SpGEMM_BIN for load balancing (only used in kernel_flag == 2)
-    SpGEMM_BIN<IndexType, ValueType> *bin = nullptr;
+    // Symbolic Phase (matching reference hash_symbolic)
+    spgemm_hash_symbolic_omp_lb<IndexType, ValueType>(arpt, acol, brpt, bcol,
+                                  C.num_rows, C.num_cols,
+                                  cpt, c_nnz, bin);
     
-    if (kernel_flag == 2) {
-        // Create BIN for load balancing
-        bin = new SpGEMM_BIN<IndexType, ValueType>(A.num_rows, MIN_HT_S);
-        bin->set_max_bin(arpt, acol, brpt, C.num_rows, C.num_cols);
-        bin->set_bin_id(A.num_rows, C.num_cols, MIN_HT_S);
-    }
-    
-    // Symbolic phase: compute structure of C
-    IndexType b_rows = B.num_rows;  // B.num_rows == A.num_cols
-    if (kernel_flag == 1) {
-        spgemm_hash_symbolic_omp<IndexType, ValueType>(arpt, acol, brpt, bcol,
-                                  C.num_rows, C.num_cols, b_rows,
-                                  cpt, ccol, c_nnz);
-    } else if (kernel_flag == 2) {
-        spgemm_hash_symbolic_omp_lb<IndexType, ValueType>(arpt, acol, brpt, bcol,
-                                      C.num_rows, C.num_cols, b_rows,
-                                      cpt, ccol, c_nnz, bin);
-    } else {
-        // Default: OpenMP (kernel_flag == 1)
-        spgemm_hash_symbolic_omp<IndexType, ValueType>(arpt, acol, brpt, bcol,
-                                  C.num_rows, C.num_cols, b_rows,
-                                  cpt, ccol, c_nnz);
-    }
+    // Re-adjust bin_id after symbolic phase (to reduce hashtable size)
+    bin->set_bin_id(C.num_rows, C.num_cols, bin->min_ht_size);
     
     C.num_nnzs = c_nnz;
     C.row_offset = cpt;
-    C.col_index = ccol;
+    
+    // Allocate column indices and values (will be filled in numeric phase)
+    C.col_index = new_array<IndexType>(c_nnz);
     C.values = new_array<ValueType>(c_nnz);
     
-    // Numeric phase: compute values of C
-    if (kernel_flag == 1) {
-        spgemm_hash_numeric_omp<IndexType, ValueType>(arpt, acol, aval,
+    // Numeric Phase
+    spgemm_hash_numeric_omp_lb<IndexType, ValueType>(arpt, acol, aval,
                                  brpt, bcol, bval,
-                                 C.num_rows, C.num_cols, b_rows,
-                                 cpt, ccol, C.values);
-    } else if (kernel_flag == 2) {
-        spgemm_hash_numeric_omp_lb<IndexType, ValueType>(arpt, acol, aval,
-                                    brpt, bcol, bval,
-                                    C.num_rows, C.num_cols, b_rows,
-                                    cpt, ccol, C.values, bin);
-    } else {
-        // Default: OpenMP (kernel_flag == 1)
-        spgemm_hash_numeric_omp<IndexType, ValueType>(arpt, acol, aval,
-                                 brpt, bcol, bval,
-                                 C.num_rows, C.num_cols, b_rows,
-                                 cpt, ccol, C.values);
-    }
+                                 C.num_rows, C.num_cols,
+                                 cpt, C.col_index, C.values, bin);
     
     // Sort columns if requested
     if (sort_output) {
@@ -119,9 +98,7 @@ void LeSpGEMM_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
     }
     
     // Cleanup
-    if (bin != nullptr) {
-        delete bin;
-    }
+    delete bin;
 }
 
 template <typename IndexType, typename ValueType>

@@ -47,6 +47,11 @@ public:
                      const IndexType *brpt, IndexType c_rows, IndexType c_cols);
     
     /**
+     * @brief Set rows offset for load balancing
+     */
+    void set_rows_offset(IndexType nrows);
+    
+    /**
      * @brief Assign bin ID to each row based on estimated work
      */
     void set_bin_id(IndexType nrows, IndexType ncols, IndexType min_ht_sz);
@@ -63,11 +68,12 @@ public:
 };
 
 /**
- * @brief Hash function for hash table
+ * @brief Hash function for hash table (using HASH_SCAL and bitwise AND)
+ *        hash_size must be power of 2
  */
 template <typename IndexType>
 inline IndexType hash_func(IndexType key, IndexType hash_size) {
-    return key % hash_size;
+    return (key * HASH_SCAL) & (hash_size - 1);
 }
 
 /**
