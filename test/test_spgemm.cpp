@@ -31,7 +31,7 @@ void usage(int argc, char** argv)
     std::cout << "\t" << "Options:\n";
     std::cout << "\t" << " --precision = 32 (float) or 64 (double:default)\n";
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
-    std::cout << "\t" << " --test_type = correctness (default) or performance\n";
+    std::cout << "\t" << " --test_type = correctness or performance (default)\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
     std::cout << "\t" << " --kernel    = 1 (OpenMP:default) or 2 (OpenMP with load balancing)\n";
     std::cout << "\t" << " --sort      = 0 (no sort:default) or 1 (sort output columns)\n";
