@@ -12,7 +12,7 @@
 
 // Helper function: prefix sum (scan)
 template <typename IndexType>
-void scan(const IndexType *input, IndexType *output, IndexType n) {
+inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
     output[0] = 0;
     for (IndexType i = 1; i < n; i++) {
         output[i] = output[i - 1] + input[i - 1];
@@ -127,7 +127,7 @@ void SpGEMM_BIN<IndexType, ValueType>::set_rows_offset(IndexType nrows)
     
     // Prefix sum of row_nz
     IndexType *ps_row_nz = new_array<IndexType>(nrows + 1);
-    scan(row_nz, ps_row_nz, nrows + 1);
+    scan_spgemm(row_nz, ps_row_nz, nrows + 1);
     
     // Calculate average work per thread
     IndexType total_work = ps_row_nz[nrows];

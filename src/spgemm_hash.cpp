@@ -17,7 +17,7 @@
 
 // Helper function: prefix sum (scan) - same as in spgemm_bin.cpp
 template <typename IndexType>
-void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
+inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
     output[0] = 0;
     for (IndexType i = 1; i < n; i++) {
         output[i] = output[i - 1] + input[i - 1];

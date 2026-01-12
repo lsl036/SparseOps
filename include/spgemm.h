@@ -3,27 +3,28 @@
 
 #include "sparse_format.h"
 #include "spgemm_hash.h"
+#include "spgemm_array.h"
 #include "spgemm_bin.h"
 
 /**
- * @brief Compute C = A * B (SpGEMM) using hash table method
+ * @brief Compute C = A * B (SpGEMM)
  *        Supports multiple kernel implementations:
- *        Kernel 1: OpenMP parallel implementation (default)
- *        Kernel 2: OpenMP with load balancing using BIN
+ *        Kernel 1: Hash-based row-wise method (default, OpenMP with load balancing)
+ *        Kernel 2: Array-based row-wise method (HSMU-SpGEMM inspired, sorted arrays)
+ *        Future: Kernel 3+: Cluster-wise and other methods
  * 
+ * @tparam sortOutput Whether to sort output columns (template parameter)
  * @tparam IndexType 
  * @tparam ValueType 
  * @param A Input matrix A in CSR format
  * @param B Input matrix B in CSR format  
  * @param C Output matrix C in CSR format (will be allocated)
- * @param sort_output Whether to sort output columns (default: true)
- * @param kernel_flag Kernel selection flag (1=omp default, 2=omp_lb)
+ * @param kernel_flag Kernel selection flag (1=hash row-wise, 2=array row-wise)
  */
-template <typename IndexType, typename ValueType>
+template <bool sortOutput = true, typename IndexType, typename ValueType>
 void LeSpGEMM(const CSR_Matrix<IndexType, ValueType> &A,
               const CSR_Matrix<IndexType, ValueType> &B,
               CSR_Matrix<IndexType, ValueType> &C,
-              bool sort_output = true,
               int kernel_flag = 1);
 
 /**
@@ -42,15 +43,29 @@ long long int get_spgemm_flop(const CSR_Matrix<IndexType, ValueType> &A,
                                const CSR_Matrix<IndexType, ValueType> &B);
 
 /**
- * @brief Row-wise SpGEMM implementation (current implementation)
- *        This is the base implementation, can be extended with cluster-wise later
+ * @brief Hash-based row-wise SpGEMM implementation
+ *        Uses hash tables for accumulation (kernel_flag = 1)
+ * 
+ * @tparam sortOutput Whether to sort output columns (template parameter)
  */
-template <typename IndexType, typename ValueType>
-void LeSpGEMM_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
-                      const CSR_Matrix<IndexType, ValueType> &B,
-                      CSR_Matrix<IndexType, ValueType> &C,
-                      bool sort_output = true,
-                      int kernel_flag = 1);
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_hash_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
+                           const CSR_Matrix<IndexType, ValueType> &B,
+                           CSR_Matrix<IndexType, ValueType> &C,
+                           int kernel_flag = 1);
+
+/**
+ * @brief Array-based row-wise SpGEMM implementation (HSMU-SpGEMM inspired)
+ *        Uses sorted arrays for accumulation (kernel_flag = 2)
+ *        Benefits: no hash collisions, better memory efficiency, natural sorting
+ * 
+ * @tparam sortOutput Whether to sort output columns (template parameter, ignored since array is already sorted)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_array_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
+                            const CSR_Matrix<IndexType, ValueType> &B,
+                            CSR_Matrix<IndexType, ValueType> &C,
+                            int kernel_flag = 2);
 
 #endif /* SPGEMM_H */
 

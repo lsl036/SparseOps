@@ -3,10 +3,18 @@
 Matrix comparison script for SpGEMM results validation.
 Compares computed results with reference results.
 Since columns are not sorted, we compare row-wise non-zero elements.
+
+Usage:
+    python3 compare_results.py [--kernel=1|2|hashrowwise|arrayrowwise]
+    
+    --kernel: Select kernel to compare (default: 1)
+              1 or hashrowwise: Hash-based row-wise kernel
+              2 or arrayrowwise: Array-based row-wise kernel
 """
 
 import sys
 import os
+import argparse
 from collections import defaultdict
 
 # Matrix names array for easy extension
@@ -126,11 +134,71 @@ def compare_matrices(ref_file, computed_file, tolerance=1e-10):
     return True, "Matrices match!"
 
 
+def parse_kernel_arg(kernel_arg):
+    """
+    Parse kernel argument and return suffix string.
+    Returns: suffix string (e.g., "hashrowwise" or "arrayrowwise")
+    """
+    if kernel_arg is None:
+        return "hashrowwise"  # Default to kernel 1
+    
+    kernel_arg = str(kernel_arg).lower()
+    
+    # Support numeric values
+    if kernel_arg == "1":
+        return "hashrowwise"
+    elif kernel_arg == "2":
+        return "arrayrowwise"
+    # Support string values
+    elif kernel_arg == "hashrowwise" or kernel_arg == "hash":
+        return "hashrowwise"
+    elif kernel_arg == "arrayrowwise" or kernel_arg == "array":
+        return "arrayrowwise"
+    else:
+        print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashrowwise")
+        return "hashrowwise"
+
+
+def get_kernel_display_name(suffix):
+    """Get human-readable kernel name from suffix."""
+    if suffix == "hashrowwise":
+        return "Hash-based row-wise"
+    elif suffix == "arrayrowwise":
+        return "Array-based row-wise"
+    else:
+        return f"Unknown ({suffix})"
+
+
 def main():
     """Main function to compare matrices."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Compare SpGEMM computed results with reference results",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python3 compare_results.py --kernel=1
+  python3 compare_results.py --kernel=hashrowwise
+  python3 compare_results.py --kernel=2
+  python3 compare_results.py --kernel=arrayrowwise
+        """
+    )
+    parser.add_argument(
+        "--kernel",
+        type=str,
+        default="1",
+        help="Kernel to compare: 1 or hashrowwise (Hash-based row-wise, default), "
+             "2 or arrayrowwise (Array-based row-wise)"
+    )
+    
+    args = parser.parse_args()
+    kernel_suffix = parse_kernel_arg(args.kernel)
+    kernel_display = get_kernel_display_name(kernel_suffix)
+    
     print("=" * 60)
     print("SpGEMM Result Validation")
     print("=" * 60)
+    print(f"Kernel: {kernel_display} (suffix: {kernel_suffix})")
     print()
     
     all_passed = True
@@ -138,15 +206,19 @@ def main():
     for matrix_name in MATRIX_NAMES:
         print(f"\n{'='*60}")
         print(f"Testing matrix: {matrix_name}")
+        print(f"Kernel: {kernel_display}")
         print(f"{'='*60}")
         
         # Construct file paths
         ref_file = os.path.join(SCRIPT_DIR, f"{matrix_name}_res.mtx")
         
+        # Build computed file name with kernel suffix
+        comp_filename = f"{matrix_name}_SpOps_{kernel_suffix}.mtx"
+        
         # Try multiple possible locations for computed file
-        comp_file = os.path.join(SCRIPT_DIR, f"{matrix_name}_SpOps.mtx")
+        comp_file = os.path.join(SCRIPT_DIR, comp_filename)
         if not os.path.exists(comp_file):
-            comp_file = os.path.join(BASE_DIR, "build", f"{matrix_name}_SpOps.mtx")
+            comp_file = os.path.join(BASE_DIR, "build", comp_filename)
         
         # Check if files exist
         if not os.path.exists(ref_file):
@@ -155,11 +227,11 @@ def main():
             continue
         
         if not os.path.exists(comp_file):
-            print(f"ERROR: Computed file not found: {comp_file}")
+            print(f"ERROR: Computed file not found: {comp_filename}")
             print(f"       Searched in:")
-            print(f"         - {os.path.join(SCRIPT_DIR, f'{matrix_name}_SpOps.mtx')}")
-            print(f"         - {os.path.join(BASE_DIR, 'build', f'{matrix_name}_SpOps.mtx')}")
-            print(f"       Please run test_spgemm first to generate the result.")
+            print(f"         - {os.path.join(SCRIPT_DIR, comp_filename)}")
+            print(f"         - {os.path.join(BASE_DIR, 'build', comp_filename)}")
+            print(f"       Please run test_spgemm with --kernel={args.kernel} first to generate the result.")
             all_passed = False
             continue
         
@@ -167,20 +239,20 @@ def main():
         is_match, message = compare_matrices(ref_file, comp_file)
         
         if is_match:
-            print(f"[PASSED] {matrix_name}")
+            print(f"[PASSED] {matrix_name} ({kernel_display})")
             print(f"  {message}")
         else:
-            print(f"[FAILED] {matrix_name}")
+            print(f"[FAILED] {matrix_name} ({kernel_display})")
             print(f"  {message}")
             all_passed = False
     
     print()
     print("=" * 60)
     if all_passed:
-        print("All tests PASSED!")
+        print(f"All tests PASSED for {kernel_display} kernel!")
         return 0
     else:
-        print("Some tests FAILED!")
+        print(f"Some tests FAILED for {kernel_display} kernel!")
         return 1
 
 

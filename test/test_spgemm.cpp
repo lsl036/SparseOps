@@ -33,7 +33,7 @@ void usage(int argc, char** argv)
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
     std::cout << "\t" << " --test_type = correctness or performance (default)\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
-    std::cout << "\t" << " --kernel    = 1 (OpenMP:default) or 2 (OpenMP with load balancing)\n";
+    std::cout << "\t" << " --kernel    = 1 (Hash-based row-wise:default) or 2 (Array-based row-wise)\n";
     std::cout << "\t" << " --sort      = 0 (no sort:default) or 1 (sort output columns)\n";
     std::cout << "Note: Matrix files must be real-valued sparse matrices in the MatrixMarket file format.\n";
 }
@@ -62,12 +62,23 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
     }
     
     cout << "\n--- Testing Kernel " << kernel_flag << " ---" << endl;
+    if (kernel_flag == 1) {
+        cout << "Kernel: Hash-based row-wise SpGEMM (OpenMP with load balancing)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << "Kernel: Array-based row-wise SpGEMM (HSMU-SpGEMM inspired)" << endl;
+    } else {
+        cout << "Kernel: Unknown kernel flag, defaulting to Hash-based row-wise" << endl;
+    }
     
     CSR_Matrix<IndexType, ValueType> C;
     anonymouslib_timer timer;
     
     timer.start();
-    LeSpGEMM(A, B, C, sortOutput, kernel_flag);
+    if (sortOutput) {
+        LeSpGEMM<true, IndexType, ValueType>(A, B, C, kernel_flag);
+    } else {
+        LeSpGEMM<false, IndexType, ValueType>(A, B, C, kernel_flag);
+    }
     double time = timer.stop();
     
     cout << "C: " << C.num_rows << " x " << C.num_cols << ", nnz: " << C.num_nnzs << endl;
@@ -101,7 +112,14 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
     
     // Write matrix C to MTX file
     std::string matA_name = extractFileNameWithoutExtension(matA_path);
-    std::string output_filename = matA_name + "_SpOps.mtx";
+    std::string suffix_str;
+    if (kernel_flag == 1) {
+        suffix_str = "hashrowwise";
+    } else if (kernel_flag == 2) {
+        suffix_str = "arrayrowwise";
+    }
+    
+    std::string output_filename = matA_name + "_SpOps_" + suffix_str + ".mtx";
     
     // Convert CSR to COO for writing
     COO_Matrix<IndexType, ValueType> coo_C = csr_to_coo(C);
@@ -172,11 +190,22 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
     cout << "Estimated FLOPs: " << flops << endl;
     
     cout << "\n--- Kernel " << kernel_flag << " Performance ---" << endl;
+    if (kernel_flag == 1) {
+        cout << "Kernel: Hash-based row-wise SpGEMM (OpenMP with load balancing)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << "Kernel: Array-based row-wise SpGEMM (HSMU-SpGEMM inspired)" << endl;
+    } else {
+        cout << "Kernel: Unknown kernel flag, defaulting to Hash-based row-wise" << endl;
+    }
     
     CSR_Matrix<IndexType, ValueType> C;
     
     // Warmup (first execution is excluded from evaluation)
-    LeSpGEMM(A, B, C, sortOutput, kernel_flag);
+    if (sortOutput) {
+        LeSpGEMM<true, IndexType, ValueType>(A, B, C, kernel_flag);
+    } else {
+        LeSpGEMM<false, IndexType, ValueType>(A, B, C, kernel_flag);
+    }
     delete_host_matrix(C);
     
     // Benchmark (matching reference RowSpGEMM.cpp timing)
@@ -189,7 +218,11 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
         start = (double)clock() / CLOCKS_PER_SEC;
         #endif
         
-        LeSpGEMM(A, B, C, sortOutput, kernel_flag);
+        if (sortOutput) {
+            LeSpGEMM<true, IndexType, ValueType>(A, B, C, kernel_flag);
+        } else {
+            LeSpGEMM<false, IndexType, ValueType>(A, B, C, kernel_flag);
+        }
         
         #ifdef _OPENMP
         end = omp_get_wtime();
@@ -282,7 +315,14 @@ void run_spgemm_test(int argc, char **argv)
     cout << "Matrix A: " << matA_path << endl;
     cout << "Matrix B: " << matB_path << endl;
     cout << "Test type: " << test_type << endl;
-    cout << "Kernel: " << kernel_flag << endl;
+    cout << "Kernel: " << kernel_flag;
+    if (kernel_flag == 1) {
+        cout << " (Hash-based row-wise)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << " (Array-based row-wise)" << endl;
+    } else {
+        cout << " (Unknown, defaulting to Hash-based row-wise)" << endl;
+    }
     cout << "Sort output: " << (sortOutput ? "yes" : "no") << endl;
     cout << "Threads: " << Le_get_thread_num() << endl;
     cout << endl;

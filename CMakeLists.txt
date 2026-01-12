@@ -120,10 +120,22 @@ set_target_properties(SpOps_static PROPERTIES OUTPUT_NAME SpOps)
 set(SOURCE_SCRIPT_DIR ${CMAKE_SOURCE_DIR}/script)
 set(DESTINATION_SCRIPT_DIR ${CMAKE_BINARY_DIR})
 
+# 查找所有 .py 和 .sh 脚本文件
+file(GLOB PYTHON_SCRIPTS "${SOURCE_SCRIPT_DIR}/*.py")
+file(GLOB SHELL_SCRIPTS "${SOURCE_SCRIPT_DIR}/*.sh")
+
+# 拷贝 .py 和 .sh 脚本文件到构建目录
 add_custom_command(TARGET SpOps_static POST_BUILD
-                  COMMAND ${CMAKE_COMMAND} -E copy_directory
-                          ${SOURCE_SCRIPT_DIR} ${DESTINATION_SCRIPT_DIR}
-                  COMMENT "Copying scripts to build directory")
+                  COMMAND ${CMAKE_COMMAND} -E make_directory ${DESTINATION_SCRIPT_DIR}
+                  COMMENT "Creating script directory in build folder")
+
+foreach(SCRIPT_FILE ${PYTHON_SCRIPTS} ${SHELL_SCRIPTS})
+    get_filename_component(SCRIPT_NAME ${SCRIPT_FILE} NAME)
+    add_custom_command(TARGET SpOps_static POST_BUILD
+                      COMMAND ${CMAKE_COMMAND} -E copy
+                              ${SCRIPT_FILE} ${DESTINATION_SCRIPT_DIR}/${SCRIPT_NAME}
+                      COMMENT "Copying ${SCRIPT_NAME} to build directory")
+endforeach()
 
 # Gather the test sources
 file(GLOB TEST_SOURCES "test/*.cpp")
