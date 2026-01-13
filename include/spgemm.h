@@ -5,13 +5,16 @@
 #include "spgemm_hash.h"
 #include "spgemm_array.h"
 #include "spgemm_bin.h"
+#include "spgemm_Flength_hash.h"
+#include "spgemm_cluster.h"
+#include "sparse_conversion.h"
 
 /**
- * @brief Compute C = A * B (SpGEMM)
+ * @brief Compute C = A * B (SpGEMM) - Row-wise methods only
  *        Supports multiple kernel implementations:
  *        Kernel 1: Hash-based row-wise method (default, OpenMP with load balancing)
  *        Kernel 2: Array-based row-wise method (HSMU-SpGEMM inspired, sorted arrays)
- *        Future: Kernel 3+: Cluster-wise and other methods
+ *        Note: For cluster-wise methods, use LeSpGEMM_FLength instead
  * 
  * @tparam sortOutput Whether to sort output columns (template parameter)
  * @tparam IndexType 
@@ -66,6 +69,44 @@ void LeSpGEMM_array_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
                             const CSR_Matrix<IndexType, ValueType> &B,
                             CSR_Matrix<IndexType, ValueType> &C,
                             int kernel_flag = 2);
+
+/**
+ * @brief Fixed-length Cluster-wise SpGEMM implementation
+ *        Input and output are CSR_FlengthCluster format (no format conversion)
+ *        Supports multiple kernels:
+ *        Kernel 1: Hash-based cluster-wise method (default)
+ *        Kernel 2: Array-based cluster-wise method (future)
+ * 
+ * @tparam sortOutput Whether to sort output columns (template parameter)
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_FlengthCluster format
+ * @param B Input matrix B in CSR_Matrix format
+ * @param C_cluster Output matrix C in CSR_FlengthCluster format (will be allocated)
+ * @param kernel_flag Kernel selection flag (1=hash-based cluster-wise, default)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+                      const CSR_Matrix<IndexType, ValueType> &B,
+                      CSR_FlengthCluster<IndexType, ValueType> &C_cluster,
+                      int kernel_flag = 1);
+
+/**
+ * @brief Hash-based Fixed-length Cluster-wise SpGEMM implementation
+ *        Uses hash tables for accumulation at cluster level (kernel_flag = 1)
+ *        This is a sub-interface called by LeSpGEMM_FLength
+ * 
+ * @tparam sortOutput Whether to sort output columns (template parameter)
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_FlengthCluster format
+ * @param B Input matrix B in CSR_Matrix format
+ * @param C_cluster Output matrix C in CSR_FlengthCluster format (will be allocated)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_hash_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+                           const CSR_Matrix<IndexType, ValueType> &B,
+                           CSR_FlengthCluster<IndexType, ValueType> &C_cluster);
 
 #endif /* SPGEMM_H */
 

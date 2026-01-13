@@ -1,0 +1,78 @@
+#ifndef SPGEMM_FLENGTH_HASH_H
+#define SPGEMM_FLENGTH_HASH_H
+
+#include "sparse_format.h"
+#include "spgemm_cluster.h"
+#include "memopt.h"
+#include "thread.h"
+#include "general_config.h"
+#include <omp.h>
+#include <algorithm>
+
+/**
+ * @brief Fixed-length Cluster-wise SpGEMM using hash table method
+ *        OpenMP with load balancing using SpGEMM_BIN_FlengthCluster
+ * 
+ * Key differences from row-wise hash SpGEMM:
+ * - Input matrix A is in CSR_FlengthCluster format (fixed-size clusters)
+ * - Uses SpGEMM_BIN_FlengthCluster for cluster-level load balancing
+ * - Output matrix C is in CSR_FlengthCluster format (cluster-wise)
+ * - Each cluster contains cluster_sz rows, results are computed per cluster
+ */
+
+/**
+ * @brief Symbolic phase: compute structure of C_cluster = A_cluster * B
+ *        OpenMP with load balancing using SpGEMM_BIN_FlengthCluster
+ *        Computes nnz per cluster (not per row)
+ *        crpt should be pre-allocated (c_clusters + 1 elements)
+ *        This function performs scan internally to compute nnzc
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_FlengthCluster format
+ * @param brpt B matrix row pointer array
+ * @param bcol B matrix column index array
+ * @param c_clusters Number of clusters in output matrix C (equals A_cluster.rows)
+ * @param c_cols Number of columns in output matrix C (equals B.num_cols)
+ * @param crpt Output cluster pointer array (pre-allocated, length: c_clusters + 1)
+ * @param c_nnzc Output total number of unique column IDs across all clusters
+ * @param bin SpGEMM_BIN_FlengthCluster for load balancing
+ */
+template <typename IndexType, typename ValueType>
+void spgemm_Flength_hash_symbolic_omp_lb(
+    const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+    const IndexType *brpt, const IndexType *bcol,
+    IndexType c_clusters, IndexType c_cols,
+    IndexType *crpt, IndexType &c_nnzc,
+    SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin);
+
+/**
+ * @brief Numeric phase: compute values of C_cluster = A_cluster * B using hash tables
+ *        OpenMP with load balancing using SpGEMM_BIN_FlengthCluster
+ *        Output is in CSR_FlengthCluster format (cluster-wise)
+ * 
+ * @tparam sortOutput If true, ensures output columns are sorted
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_FlengthCluster format
+ * @param brpt B matrix row pointer array
+ * @param bcol B matrix column index array
+ * @param bval B matrix values array
+ * @param c_clusters Number of clusters in output matrix C
+ * @param c_cols Number of columns in output matrix C
+ * @param crpt Cluster pointer array (from symbolic phase)
+ * @param ccolids Output column index array (pre-allocated, length: c_nnzc)
+ * @param cvalues Output values array (pre-allocated, length: c_nnzc * cluster_sz)
+ * @param bin SpGEMM_BIN_FlengthCluster for load balancing
+ * @param cluster_sz Cluster size (number of rows per cluster)
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+void spgemm_Flength_hash_numeric_omp_lb(
+    const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
+    IndexType c_clusters, IndexType c_cols,
+    const IndexType *crpt, IndexType *ccolids, ValueType *cvalues,
+    SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin,
+    IndexType cluster_sz);
+
+#endif /* SPGEMM_FLENGTH_HASH_H */

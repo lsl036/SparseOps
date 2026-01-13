@@ -19,6 +19,9 @@ inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) 
     }
 }
 
+// ============================================================================
+// Row Wise BIN Structure
+// ============================================================================
 template <typename IndexType, typename ValueType>
 SpGEMM_BIN<IndexType, ValueType>::SpGEMM_BIN(IndexType nrows, IndexType min_ht_sz)
     : num_rows(nrows), min_ht_size(min_ht_sz), max_bin_id(0), allocated_thread_num(0)

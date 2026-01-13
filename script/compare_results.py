@@ -149,11 +149,15 @@ def parse_kernel_arg(kernel_arg):
         return "hashrowwise"
     elif kernel_arg == "2":
         return "arrayrowwise"
+    elif kernel_arg == "3":
+        return "hashflengthcluster"
     # Support string values
     elif kernel_arg == "hashrowwise" or kernel_arg == "hash":
         return "hashrowwise"
     elif kernel_arg == "arrayrowwise" or kernel_arg == "array":
         return "arrayrowwise"
+    elif kernel_arg == "hashflengthcluster" or kernel_arg == "hashflength":
+        return "hashflengthcluster"
     else:
         print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashrowwise")
         return "hashrowwise"
@@ -165,6 +169,8 @@ def get_kernel_display_name(suffix):
         return "Hash-based row-wise"
     elif suffix == "arrayrowwise":
         return "Array-based row-wise"
+    elif suffix == "hashflengthcluster":
+        return "Hash-based fixed-length cluster"
     else:
         return f"Unknown ({suffix})"
 
@@ -181,6 +187,8 @@ Examples:
   python3 compare_results.py --kernel=hashrowwise
   python3 compare_results.py --kernel=2
   python3 compare_results.py --kernel=arrayrowwise
+  python3 compare_results.py --kernel=3
+  python3 compare_results.py --kernel=hashflengthcluster
         """
     )
     parser.add_argument(

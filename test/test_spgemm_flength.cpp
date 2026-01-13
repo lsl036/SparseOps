@@ -1,7 +1,7 @@
 /**
- * @file test_spgemm.cpp
+ * @file test_spgemm_flength.cpp
  * @author Shengle Lin (lsl036@hnu.edu.cn)
- * @brief Test program for SpGEMM correctness and performance
+ * @brief Test program for Fixed-length Cluster SpGEMM correctness and performance
  * @version 0.1
  * @date 2026
  */
@@ -11,12 +11,14 @@
 #include "../include/timer.h"
 #include "../include/cmdline.h"
 #include "../include/sparse_io.h"
+#include "../include/sparse_conversion.h"
 #include "../include/mmio.h"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
 #include <string>
+#include <cmath>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -33,75 +35,81 @@ void usage(int argc, char** argv)
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
     std::cout << "\t" << " --test_type = correctness or performance (default)\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
-    std::cout << "\t" << " --kernel    = 1 (Hash-based row-wise:default) or 2 (Array-based row-wise)\n";
-    std::cout << "\t" << "Note: For cluster-wise methods, use test_spgemm_flength instead\n";
+    std::cout << "\t" << " --kernel    = 1 (Hash-based cluster-wise:default)\n";
+    std::cout << "\t" << " --cluster_sz= cluster size (default: 8)\n";
     std::cout << "\t" << " --sort      = 0 (no sort:default) or 1 (sort output columns)\n";
     std::cout << "Note: Matrix files must be real-valued sparse matrices in the MatrixMarket file format.\n";
 }
 
 template <typename IndexType, typename ValueType>
-void test_spgemm_correctness(const char *matA_path, const char *matB_path, int kernel_flag = 1, bool sortOutput = false)
+void test_spgemm_flength_correctness(const char *matA_path, const char *matB_path, 
+                                     int kernel_flag = 1, bool sortOutput = false, 
+                                     IndexType cluster_sz = 8)
 {
     cout << "========================================" << endl;
-    cout << "Testing SpGEMM Correctness" << endl;
+    cout << "Testing Fixed-length Cluster SpGEMM Correctness" << endl;
     cout << "========================================" << endl;
     
     // Read matrices
     cout << "Reading matrix A from: " << matA_path << endl;
-    CSR_Matrix<IndexType, ValueType> A = read_csr_matrix<IndexType, ValueType>(matA_path);
-    cout << "A: " << A.num_rows << " x " << A.num_cols << ", nnz: " << A.num_nnzs << endl;
+    CSR_Matrix<IndexType, ValueType> A_csr = read_csr_matrix<IndexType, ValueType>(matA_path);
+    cout << "A: " << A_csr.num_rows << " x " << A_csr.num_cols << ", nnz: " << A_csr.num_nnzs << endl;
     
     cout << "Reading matrix B from: " << matB_path << endl;
     CSR_Matrix<IndexType, ValueType> B = read_csr_matrix<IndexType, ValueType>(matB_path);
     cout << "B: " << B.num_rows << " x " << B.num_cols << ", nnz: " << B.num_nnzs << endl;
     
-    if (A.num_cols != B.num_rows) {
-        cerr << "Error: A.num_cols (" << A.num_cols << ") != B.num_rows (" << B.num_rows << ")" << endl;
-        delete_host_matrix(A);
+    if (A_csr.num_cols != B.num_rows) {
+        cerr << "Error: A.num_cols (" << A_csr.num_cols << ") != B.num_rows (" << B.num_rows << ")" << endl;
+        delete_host_matrix(A_csr);
         delete_host_matrix(B);
         return;
     }
     
+    // Convert A to CSR_FlengthCluster format
+    cout << "Converting A to CSR_FlengthCluster format (cluster_sz = " << cluster_sz << ")..." << endl;
+    CSR_FlengthCluster<IndexType, ValueType> A_cluster = csr_to_cluster<IndexType, ValueType>(A_csr, cluster_sz);
+    cout << "A_cluster: " << A_cluster.rows << " clusters, " << A_cluster.nnzc << " unique columns" << endl;
+    
     cout << "\n--- Testing Kernel " << kernel_flag << " ---" << endl;
     if (kernel_flag == 1) {
-        cout << "Kernel: Hash-based row-wise SpGEMM (OpenMP with load balancing)" << endl;
-    } else if (kernel_flag == 2) {
-        cout << "Kernel: Array-based row-wise SpGEMM (HSMU-SpGEMM inspired)" << endl;
+        cout << "Kernel: Hash-based cluster-wise SpGEMM (OpenMP with load balancing)" << endl;
     } else {
-        cout << "Kernel: Unknown kernel flag, defaulting to Hash-based row-wise" << endl;
+        cout << "Kernel: Unknown kernel flag, defaulting to Hash-based cluster-wise" << endl;
     }
     
-    CSR_Matrix<IndexType, ValueType> C;
+    CSR_FlengthCluster<IndexType, ValueType> C_cluster;
     anonymouslib_timer timer;
     
     timer.start();
     if (sortOutput) {
-        LeSpGEMM<true, IndexType, ValueType>(A, B, C, kernel_flag);
+        LeSpGEMM_FLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     } else {
-        LeSpGEMM<false, IndexType, ValueType>(A, B, C, kernel_flag);
+        LeSpGEMM_FLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     }
     double time = timer.stop();
     
-    cout << "C: " << C.num_rows << " x " << C.num_cols << ", nnz: " << C.num_nnzs << endl;
+    cout << "C_cluster: " << C_cluster.rows << " clusters, " << C_cluster.nnzc << " unique columns" << endl;
+    cout << "C_cluster (CSR equivalent): " << C_cluster.csr_rows << " x " << C_cluster.cols << ", nnz: " << C_cluster.num_nnzs << endl;
     cout << "Time: " << time << " ms" << endl;
     
     // Calculate performance
-    long long int flops = get_spgemm_flop(A, B);
+    long long int flops = get_spgemm_flop(A_csr, B);
     double gflops = (flops / 1e9) / (time / 1000.0);
     cout << "Performance: " << gflops << " GFLOPS" << endl;
     
     // Verify basic properties
     bool valid = true;
-    if (C.num_rows != A.num_rows) {
-        cerr << "Error: C.num_rows != A.num_rows" << endl;
+    if (C_cluster.csr_rows != A_csr.num_rows) {
+        cerr << "Error: C_cluster.csr_rows != A.num_rows" << endl;
         valid = false;
     }
-    if (C.num_cols != B.num_cols) {
-        cerr << "Error: C.num_cols != B.num_cols" << endl;
+    if (C_cluster.cols != B.num_cols) {
+        cerr << "Error: C_cluster.cols != B.num_cols" << endl;
         valid = false;
     }
-    if (C.num_nnzs < 0) {
-        cerr << "Error: C.num_nnzs < 0" << endl;
+    if (C_cluster.num_nnzs < 0) {
+        cerr << "Error: C_cluster.num_nnzs < 0" << endl;
         valid = false;
     }
     
@@ -111,21 +119,26 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
         cout << "Basic validation: FAILED" << endl;
     }
     
+    // Convert C_cluster to CSR format for writing
+    cout << "\nConverting C_cluster to CSR format..." << endl;
+    CSR_Matrix<IndexType, ValueType> C_csr = flength_cluster2csr<IndexType, ValueType>(C_cluster);
+    cout << "C_csr: " << C_csr.num_rows << " x " << C_csr.num_cols << ", nnz: " << C_csr.num_nnzs << endl;
+    
     // Write matrix C to MTX file
     std::string matA_name = extractFileNameWithoutExtension(matA_path);
     std::string suffix_str;
     if (kernel_flag == 1) {
-        suffix_str = "hashrowwise";
+        suffix_str = "hashflengthcluster";
     } else if (kernel_flag == 2) {
-        suffix_str = "arrayrowwise";
+        suffix_str = "arrayflengthcluster";
     } else {
-        suffix_str = "hashrowwise";  // default
+        suffix_str = "hashflengthcluster";  // default
     }
     
     std::string output_filename = matA_name + "_SpOps_" + suffix_str + ".mtx";
     
     // Convert CSR to COO for writing
-    COO_Matrix<IndexType, ValueType> coo_C = csr_to_coo(C);
+    COO_Matrix<IndexType, ValueType> coo_C = csr_to_coo(C_csr);
     
     // Prepare arrays for mm_write_mtx_crd
     // Note: MTX format uses 1-based indexing, and mm_write_mtx_crd expects int and double
@@ -149,9 +162,9 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
     
     // Write to MTX file
     int ret = mm_write_mtx_crd(const_cast<char*>(output_filename.c_str()), 
-                                static_cast<int>(C.num_rows), 
-                                static_cast<int>(C.num_cols), 
-                                static_cast<int>(C.num_nnzs),
+                                static_cast<int>(C_csr.num_rows), 
+                                static_cast<int>(C_csr.num_cols), 
+                                static_cast<int>(C_csr.num_nnzs),
                                 I, J, V, matcode);
     
     if (ret == 0) {
@@ -164,54 +177,59 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
     delete[] J;
     delete[] V;
     delete_host_matrix(coo_C);
+    delete_host_matrix(C_csr);
     
-    delete_host_matrix(C);
-    
-    delete_host_matrix(A);
+    // Cleanup
+    delete_cluster_matrix(C_cluster);
+    delete_cluster_matrix(A_cluster);
+    delete_host_matrix(A_csr);
     delete_host_matrix(B);
 }
 
 template <typename IndexType, typename ValueType>
-void test_spgemm_performance(const char *matA_path, const char *matB_path, int iterations = 10, int kernel_flag = 1, bool sortOutput = false)
+void test_spgemm_flength_performance(const char *matA_path, const char *matB_path, 
+                                     int iterations = 10, int kernel_flag = 1, 
+                                     bool sortOutput = false, IndexType cluster_sz = 8)
 {
     cout << "========================================" << endl;
-    cout << "Testing SpGEMM Performance" << endl;
+    cout << "Testing Fixed-length Cluster SpGEMM Performance" << endl;
     cout << "========================================" << endl;
     
     // Read matrices
-    CSR_Matrix<IndexType, ValueType> A = read_csr_matrix<IndexType, ValueType>(matA_path);
+    CSR_Matrix<IndexType, ValueType> A_csr = read_csr_matrix<IndexType, ValueType>(matA_path);
     CSR_Matrix<IndexType, ValueType> B = read_csr_matrix<IndexType, ValueType>(matB_path);
     
-    if (A.num_cols != B.num_rows) {
+    if (A_csr.num_cols != B.num_rows) {
         cerr << "Error: Dimension mismatch" << endl;
-        delete_host_matrix(A);
+        delete_host_matrix(A_csr);
         delete_host_matrix(B);
         return;
     }
     
-    long long int flops = get_spgemm_flop(A, B);
+    // Convert A to CSR_FlengthCluster format
+    CSR_FlengthCluster<IndexType, ValueType> A_cluster = csr_to_cluster<IndexType, ValueType>(A_csr, cluster_sz);
+    
+    long long int flops = get_spgemm_flop(A_csr, B);
     cout << "Estimated FLOPs: " << flops << endl;
     
     cout << "\n--- Kernel " << kernel_flag << " Performance ---" << endl;
     if (kernel_flag == 1) {
-        cout << "Kernel: Hash-based row-wise SpGEMM (OpenMP with load balancing)" << endl;
-    } else if (kernel_flag == 2) {
-        cout << "Kernel: Array-based row-wise SpGEMM (HSMU-SpGEMM inspired)" << endl;
+        cout << "Kernel: Hash-based cluster-wise SpGEMM (OpenMP with load balancing)" << endl;
     } else {
-        cout << "Kernel: Unknown kernel flag, defaulting to Hash-based row-wise" << endl;
+        cout << "Kernel: Unknown kernel flag, defaulting to Hash-based cluster-wise" << endl;
     }
     
-    CSR_Matrix<IndexType, ValueType> C;
+    CSR_FlengthCluster<IndexType, ValueType> C_cluster;
     
     // Warmup (first execution is excluded from evaluation)
     if (sortOutput) {
-        LeSpGEMM<true, IndexType, ValueType>(A, B, C, kernel_flag);
+        LeSpGEMM_FLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     } else {
-        LeSpGEMM<false, IndexType, ValueType>(A, B, C, kernel_flag);
+        LeSpGEMM_FLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     }
-    delete_host_matrix(C);
+    delete_cluster_matrix(C_cluster);
     
-    // Benchmark (matching reference RowSpGEMM.cpp timing)
+    // Benchmark
     double total_time = 0.0;
     for (int i = 0; i < iterations; i++) {
         double start, end, msec;
@@ -222,9 +240,9 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
         #endif
         
         if (sortOutput) {
-            LeSpGEMM<true, IndexType, ValueType>(A, B, C, kernel_flag);
+            LeSpGEMM_FLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
         } else {
-            LeSpGEMM<false, IndexType, ValueType>(A, B, C, kernel_flag);
+            LeSpGEMM_FLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
         }
         
         #ifdef _OPENMP
@@ -236,9 +254,9 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
         msec = (end - start) * 1000.0;
         total_time += msec;
         
-        // Clear C after timing (except for last iteration)
+        // Clear C_cluster after timing (except for last iteration)
         if (i < iterations - 1) {
-            delete_host_matrix(C);
+            delete_cluster_matrix(C_cluster);
         }
     }
     double avg_time = total_time / iterations;
@@ -246,16 +264,16 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
     cout << "Average time: " << avg_time << " ms" << endl;
     double gflops = (flops / 1e9) / (avg_time / 1000.0);
     cout << "Average performance: " << gflops << " GFLOPS" << endl;
-    cout << "C nnz: " << C.num_nnzs << endl;
+    cout << "C_cluster nnzc: " << C_cluster.nnzc << ", num_nnzs: " << C_cluster.num_nnzs << endl;
     
-    delete_host_matrix(C);
-    
-    delete_host_matrix(A);
+    delete_cluster_matrix(C_cluster);
+    delete_cluster_matrix(A_cluster);
+    delete_host_matrix(A_csr);
     delete_host_matrix(B);
 }
 
 template <typename IndexType, typename ValueType>
-void run_spgemm_test(int argc, char **argv)
+void run_spgemm_flength_test(int argc, char **argv)
 {
     char *matA_path = NULL;
     char *matB_path = NULL;
@@ -300,10 +318,17 @@ void run_spgemm_test(int argc, char **argv)
     char *kernel_str = get_argval(argc, argv, "kernel");
     if(kernel_str != NULL) {
         kernel_flag = atoi(kernel_str);
-        if(kernel_flag != 1 && kernel_flag != 2) {
-            printf("Error: kernel must be 1 or 2 (for cluster-wise methods, use test_spgemm_flength)\n");
+        if(kernel_flag != 1) {
+            printf("Error: kernel must be 1 (Hash-based cluster-wise)\n");
             return;
         }
+    }
+    
+    // Parse cluster_sz
+    IndexType cluster_sz = 8;
+    char *cluster_sz_str = get_argval(argc, argv, "cluster_sz");
+    if(cluster_sz_str != NULL) {
+        cluster_sz = static_cast<IndexType>(atoi(cluster_sz_str));
     }
     
     // Parse sort_output
@@ -314,26 +339,20 @@ void run_spgemm_test(int argc, char **argv)
         sortOutput = (sort_val != 0);
     }
     
-    cout << "SpGEMM Test Program" << endl;
+    cout << "Fixed-length Cluster SpGEMM Test Program" << endl;
     cout << "Matrix A: " << matA_path << endl;
     cout << "Matrix B: " << matB_path << endl;
     cout << "Test type: " << test_type << endl;
-    cout << "Kernel: " << kernel_flag;
-    if (kernel_flag == 1) {
-        cout << " (Hash-based row-wise)" << endl;
-    } else if (kernel_flag == 2) {
-        cout << " (Array-based row-wise)" << endl;
-    } else {
-        cout << " (Unknown, defaulting to Hash-based row-wise)" << endl;
-    }
+    cout << "Kernel: " << kernel_flag << " (Hash-based cluster-wise)" << endl;
+    cout << "Cluster size: " << cluster_sz << endl;
     cout << "Sort output: " << (sortOutput ? "yes" : "no") << endl;
     cout << "Threads: " << Le_get_thread_num() << endl;
     cout << endl;
     
     if (strcmp(test_type, "performance") == 0) {
-        test_spgemm_performance<IndexType, ValueType>(matA_path, matB_path, iterations, kernel_flag, sortOutput);
+        test_spgemm_flength_performance<IndexType, ValueType>(matA_path, matB_path, iterations, kernel_flag, sortOutput, cluster_sz);
     } else {
-        test_spgemm_correctness<IndexType, ValueType>(matA_path, matB_path, kernel_flag, sortOutput);
+        test_spgemm_flength_correctness<IndexType, ValueType>(matA_path, matB_path, kernel_flag, sortOutput, cluster_sz);
     }
 }
 
@@ -368,10 +387,10 @@ int main(int argc, char *argv[])
     
     // Call appropriate template instantiation (only int64_t for IndexType)
     if (precision == 32){
-        run_spgemm_test<int64_t, float>(argc, argv);
+        run_spgemm_flength_test<int64_t, float>(argc, argv);
     }
     else if (precision == 64){
-        run_spgemm_test<int64_t, double>(argc, argv);
+        run_spgemm_flength_test<int64_t, double>(argc, argv);
     }
     else{
         usage(argc, argv);
@@ -380,4 +399,3 @@ int main(int argc, char *argv[])
     
     return EXIT_SUCCESS;
 }
-

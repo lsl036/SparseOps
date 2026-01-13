@@ -9,9 +9,13 @@
 #include"memopt.h"
 #include"timer.h"
 #include"csr5_utils.h"
+#include"spgemm_cluster.h"
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
+#include <iostream>
 
 // 宏，用于传递当前的函数名、文件名和行号
 #define CHECK_ALLOC(ptr) checkAlloc((ptr), __FUNCTION__, __FILE__, __LINE__)
@@ -1376,6 +1380,242 @@ CSR5_Matrix<IndexType, UIndexType, ValueType> csr_to_csr5(const CSR_Matrix<Index
     printf("CSR->CSR5 transpose time = %f ms\n", transpose_time);
 
     return csr5;
+}
+
+/**
+ * @brief Convert CSR format to Fixed-length Cluster CSR format
+ *        Groups multiple CSR rows into clusters of fixed size (cluster_sz)
+ *        Each cluster stores unique column IDs, with cluster_sz values per column
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param csr Input CSR matrix
+ * @param cluster_sz Number of rows per cluster (fixed size)
+ * @return CSR_FlengthCluster<IndexType, ValueType> 
+ */
+template <class IndexType, class ValueType>
+CSR_FlengthCluster<IndexType, ValueType> csr_to_cluster(const CSR_Matrix<IndexType, ValueType> &csr, const IndexType cluster_sz = 8)
+{
+    CSR_FlengthCluster<IndexType, ValueType> cluster;
+    
+    // Initialize basic fields
+    cluster.csr_rows = csr.num_rows;
+    cluster.cols = csr.num_cols;
+    cluster.cluster_sz = cluster_sz;
+    cluster.rows = (csr.num_rows + cluster_sz - 1) / cluster_sz;  // Round up
+    cluster.tag = 0;
+    
+    // Allocate rowptr array
+    cluster.rowptr = new_array<IndexType>(cluster.rows + 1);
+    CHECK_ALLOC(cluster.rowptr);
+    
+    // Step 1: Count unique column IDs per cluster and calculate rowptr
+    // Use a vector of sets to collect unique column IDs for each cluster
+    std::vector<std::unordered_set<IndexType>> cluster_cols(cluster.rows);
+    
+    #pragma omp parallel for
+    for (IndexType cluster_id = 0; cluster_id < cluster.rows; cluster_id++)
+    {
+        IndexType start_row = cluster_id * cluster_sz;
+        IndexType end_row = std::min(start_row + cluster_sz, csr.num_rows);
+        
+        // Collect unique column IDs for this cluster
+        for (IndexType row = start_row; row < end_row; row++)
+        {
+            for (IndexType j = csr.row_offset[row]; j < csr.row_offset[row + 1]; j++)
+            {
+                cluster_cols[cluster_id].insert(csr.col_index[j]);
+            }
+        }
+    }
+    
+    // Calculate rowptr (prefix sum of unique column counts per cluster)
+    cluster.rowptr[0] = 0;
+    for (IndexType i = 0; i < cluster.rows; i++)
+    {
+        cluster.rowptr[i + 1] = cluster.rowptr[i] + cluster_cols[i].size();
+    }
+    cluster.nnzc = cluster.rowptr[cluster.rows];
+    
+    // Allocate colids and values arrays
+    cluster.colids = new_array<IndexType>(cluster.nnzc);
+    CHECK_ALLOC(cluster.colids);
+    cluster.values = new_array<ValueType>((size_t)cluster.nnzc * cluster_sz);
+    CHECK_ALLOC(cluster.values);
+    
+    // Initialize values array to zero
+    std::fill_n(cluster.values, (size_t)cluster.nnzc * cluster_sz, static_cast<ValueType>(0));
+    
+    // Step 2: Fill colids and values arrays
+    #pragma omp parallel for
+    for (IndexType cluster_id = 0; cluster_id < cluster.rows; cluster_id++)
+    {
+        IndexType start_row = cluster_id * cluster_sz;
+        IndexType end_row = std::min(start_row + cluster_sz, csr.num_rows);
+        IndexType col_offset = cluster.rowptr[cluster_id];
+        
+        // Convert set to sorted vector for consistent ordering
+        std::vector<IndexType> sorted_cols(cluster_cols[cluster_id].begin(), cluster_cols[cluster_id].end());
+        std::sort(sorted_cols.begin(), sorted_cols.end());
+        
+        // Create a map from column ID to position in colids array
+        std::unordered_map<IndexType, IndexType> col_to_pos;
+        for (size_t j = 0; j < sorted_cols.size(); j++)
+        {
+            IndexType col_id = sorted_cols[j];
+            cluster.colids[col_offset + j] = col_id;
+            col_to_pos[col_id] = j;
+        }
+        
+        // Fill values array: for each row in the cluster, store its values
+        for (IndexType row = start_row; row < end_row; row++)
+        {
+            IndexType row_in_cluster = row - start_row;  // 0 to cluster_sz-1
+            
+            for (IndexType j = csr.row_offset[row]; j < csr.row_offset[row + 1]; j++)
+            {
+                IndexType col_id = csr.col_index[j];
+                ValueType val = csr.values[j];
+                
+                // Find position of this column in the cluster's colids
+                auto it = col_to_pos.find(col_id);
+                if (it != col_to_pos.end())
+                {
+                    IndexType col_pos = it->second;
+                    // Store value: values[(col_offset + col_pos) * cluster_sz + row_in_cluster]
+                    cluster.values[(col_offset + col_pos) * cluster_sz + row_in_cluster] = val;
+                }
+            }
+        }
+    }
+    
+    // Set Matrix_Features fields
+    cluster.num_rows = cluster.rows;
+    cluster.num_cols = cluster.cols;
+    cluster.num_nnzs = cluster.nnzc * cluster_sz;  // Total number of stored values
+    
+    return cluster;
+}
+
+/**
+ * @brief Convert CSR_FlengthCluster format to CSR_Matrix format
+ *        Converts a fixed-length cluster CSR matrix back to standard CSR format
+ *        Reference: cluster_utility.h::csr_flength_cluster2csr
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param cluster Input CSR_FlengthCluster matrix
+ * @return CSR_Matrix<IndexType, ValueType> 
+ */
+template <class IndexType, class ValueType>
+CSR_Matrix<IndexType, ValueType> flength_cluster2csr(const CSR_FlengthCluster<IndexType, ValueType> &cluster)
+{
+    CSR_Matrix<IndexType, ValueType> csr;
+    
+    // Initialize basic fields
+    csr.num_rows = cluster.csr_rows;
+    csr.num_cols = cluster.cols;
+    csr.num_nnzs = 0;
+    csr.kernel_flag = 0;
+    csr.tag = 0;
+    csr.partition = nullptr;
+    
+    // Threshold for considering a value as non-zero (matching reference implementation)
+    const ValueType eps = static_cast<ValueType>(0.000001);
+    
+    // Step 1: Count nnz per row (similar to symbolic phase of SpGEMM)
+    IndexType *work = new_array<IndexType>(csr.num_rows);
+    CHECK_ALLOC(work);
+    std::fill_n(work, csr.num_rows, static_cast<IndexType>(0));
+    
+    // Count non-zero elements per row
+    for (IndexType i = 0; i < cluster.rows; i++) {  // Loop over clusters
+        IndexType col_start = cluster.rowptr[i];
+        IndexType col_end = cluster.rowptr[i + 1];
+        
+        for (IndexType j = col_start; j < col_end; j++) {  // Loop over columns of cluster-i
+            // Note: col_id is not needed in this counting phase
+            for (IndexType l = 0; l < cluster.cluster_sz; l++) {  // Loop over rows in cluster
+                IndexType row_id = (i * cluster.cluster_sz) + l;
+                
+                // Check if this row is valid (not beyond csr_rows)
+                if (row_id < csr.num_rows) {
+                    ValueType val = cluster.values[(j * cluster.cluster_sz) + l];
+                    if (std::abs(val) >= eps) {
+                        work[row_id]++;
+                        csr.num_nnzs++;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Allocate CSR arrays
+    csr.row_offset = new_array<IndexType>(csr.num_rows + 1);
+    CHECK_ALLOC(csr.row_offset);
+    
+    if (csr.num_nnzs > 0) {
+        csr.col_index = new_array<IndexType>(csr.num_nnzs);
+        CHECK_ALLOC(csr.col_index);
+        csr.values = new_array<ValueType>(csr.num_nnzs);
+        CHECK_ALLOC(csr.values);
+        
+        // Calculate row_offset using prefix sum (cumulative sum)
+        // First, compute prefix sum to get final row_offset values
+        IndexType cumsum = 0;
+        for (IndexType i = 0; i < csr.num_rows; i++) {
+            IndexType temp = work[i];
+            work[i] = cumsum;  // Use work as write position
+            cumsum += temp;
+        }
+        csr.row_offset[csr.num_rows] = cumsum;  // Store total nnz
+        
+        // Copy work array to row_offset for use as write position
+        std::copy(work, work + csr.num_rows, csr.row_offset);
+        
+        // Step 2: Fill col_index and values arrays
+        for (IndexType i = 0; i < cluster.rows; i++) {  // Loop over clusters
+            IndexType col_start = cluster.rowptr[i];
+            IndexType col_end = cluster.rowptr[i + 1];
+            
+            for (IndexType j = col_start; j < col_end; j++) {  // Loop over columns of cluster-i
+                IndexType col_id = cluster.colids[j];
+                
+                for (IndexType l = 0; l < cluster.cluster_sz; l++) {  // Loop over rows in cluster
+                    IndexType row_id = (i * cluster.cluster_sz) + l;
+                    
+                    // Check if this row is valid (not beyond csr_rows)
+                    if (row_id < csr.num_rows) {
+                        ValueType val = cluster.values[(j * cluster.cluster_sz) + l];
+                        
+                        if (std::abs(val) >= eps) {
+                            IndexType pos = csr.row_offset[row_id]++;
+                            csr.col_index[pos] = col_id;
+                            csr.values[pos] = val;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Restore row_offset to correct values (prefix sum)
+        IndexType last = 0;
+        for (IndexType i = 0; i <= csr.num_rows; i++) {
+            IndexType temp = csr.row_offset[i];
+            csr.row_offset[i] = last;
+            last = temp;
+        }
+    } else {
+        // Empty matrix case
+        csr.col_index = nullptr;
+        csr.values = nullptr;
+        std::fill_n(csr.row_offset, csr.num_rows + 1, static_cast<IndexType>(0));
+    }
+    
+    // Cleanup
+    delete_array(work);
+    
+    return csr;
 }
 
 #endif /* SPARSE_CONVERSION_H */
