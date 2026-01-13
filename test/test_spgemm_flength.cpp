@@ -90,7 +90,7 @@ void test_spgemm_flength_correctness(const char *matA_path, const char *matB_pat
     double time = timer.stop();
     
     cout << "C_cluster: " << C_cluster.rows << " clusters, " << C_cluster.nnzc << " unique columns" << endl;
-    cout << "C_cluster (CSR equivalent): " << C_cluster.csr_rows << " x " << C_cluster.cols << ", nnz: " << C_cluster.num_nnzs << endl;
+    cout << "C_cluster (CSR equivalent): " << C_cluster.csr_rows << " x " << C_cluster.cols << endl;
     cout << "Time: " << time << " ms" << endl;
     
     // Calculate performance
@@ -264,7 +264,7 @@ void test_spgemm_flength_performance(const char *matA_path, const char *matB_pat
     cout << "Average time: " << avg_time << " ms" << endl;
     double gflops = (flops / 1e9) / (avg_time / 1000.0);
     cout << "Average performance: " << gflops << " GFLOPS" << endl;
-    cout << "C_cluster nnzc: " << C_cluster.nnzc << ", num_nnzs: " << C_cluster.num_nnzs << endl;
+    // cout << "C_cluster nnzc: " << C_cluster.nnzc << ", num_nnzs: " << C_cluster.num_nnzs << endl;
     
     delete_cluster_matrix(C_cluster);
     delete_cluster_matrix(A_cluster);

@@ -109,15 +109,16 @@ public:
     IndexType max_bin_id;
     IndexType min_ht_size;
     
-    IndexType *bin_id;              // bin ID for each cluster
+    char *bin_id;                   // bin ID for each cluster (matching reference implementation: char for memory efficiency)
     IndexType *cluster_nz;          // number of nonzeros per cluster (estimated)
     IndexType *clusters_offset;      // cluster offset for each thread (for load balancing)
     
     // Thread-local hash tables (for cluster-wise accumulation)
     IndexType **local_hash_table_id;  // [thread_id][hash_size]
     ValueType **local_hash_table_val; // [thread_id][hash_size]
-    IndexType *hash_table_size;      // hash table size for each thread
     int allocated_thread_num;        // number of threads for which memory was allocated
+    int64_t total_intprod;           // total intermediate products (for load balancing)
+    size_t total_size;               // total memory size in bytes (matching reference implementation)
     
     /**
      * @brief Constructor
@@ -140,22 +141,22 @@ public:
     /**
      * @brief Set max bin ID based on cluster matrix structure
      *        Estimates work per cluster based on A and B matrices
+     *        Matching reference implementation: set_max_bin(arpt, acol, brpt, cols)
      */
-    void set_max_bin(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
-                     const CSR_Matrix<IndexType, ValueType> &B,
-                     IndexType c_cols);
+    void set_max_bin(const IndexType *arpt, const IndexType *acol,
+                     const IndexType *brpt, IndexType cols);
     
     /**
      * @brief Set clusters offset for load balancing
      *        Partitions clusters among threads based on estimated work
      */
-    void set_clusters_offset(IndexType nclusters);
+    void set_clusters_offset();
     
     /**
      * @brief Assign bin ID to each cluster based on estimated work
      *        Work is estimated as cluster_nz[i] * avg_nnz_per_col_in_B
      */
-    void set_bin_id(IndexType nclusters, IndexType ncols, IndexType min_ht_sz);
+    void set_bin_id(IndexType ncols, IndexType min_ht_sz);
     
     /**
      * @brief Create thread-local hash tables
@@ -164,7 +165,13 @@ public:
     void create_local_hash_table(IndexType max_cols);
     
     /**
-     * @brief Calculate memory size in GB
+     * @brief Calculate memory size in bytes (matching reference implementation)
+     */
+    size_t calculate_size();
+    
+    /**
+     * @brief Calculate memory size in bytes (matching reference implementation)
+     *        Note: Despite the name, returns bytes, not GB (matching reference)
      */
     double calculate_size_in_gb();
 };

@@ -130,25 +130,24 @@ void spgemm_Flength_hash_symbolic_omp_lb(
                 IndexType col_end = A_cluster.rowptr[cluster_id + 1];
                 
                 // For each column in this cluster, collect unique column IDs from B
+                // Note: Reference code doesn't check bounds here, assuming valid input
                 for (IndexType j = col_start; j < col_end; ++j) {
                     IndexType t_acol = A_cluster.colids[j];
                     // Multiply with B[t_acol, :]
-                    if (t_acol < c_cols && t_acol < A_cluster.cols) {
-                        for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                            IndexType key = bcol[k];
-                            IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
-                            while (1) {  // Loop for hash probing
-                                if (check[hash] == key) {  // if the key is already inserted, it's ok
-                                    break;
-                                }
-                                else if (check[hash] == -1) {  // if the key has not been inserted yet, then it's added.
-                                    check[hash] = key;
-                                    nz++;
-                                    break;
-                                }
-                                else {  // linear probing: check next entry
-                                    hash = (hash + 1) & (ht_size - 1);  // hash = (hash + 1) % ht_size
-                                }
+                    for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
+                        IndexType key = bcol[k];
+                        IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
+                        while (1) {  // Loop for hash probing
+                            if (check[hash] == key) {  // if the key is already inserted, it's ok
+                                break;
+                            }
+                            else if (check[hash] == -1) {  // if the key has not been inserted yet, then it's added.
+                                check[hash] = key;
+                                nz++;
+                                break;
+                            }
+                            else {  // linear probing: check next entry
+                                hash = (hash + 1) & (ht_size - 1);  // hash = (hash + 1) % ht_size
                             }
                         }
                     }
@@ -175,7 +174,7 @@ void spgemm_Flength_hash_numeric_omp_lb(
     IndexType c_clusters, IndexType c_cols,
     const IndexType *crpt, IndexType *ccolids, ValueType *cvalues,
     SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin,
-    IndexType cluster_sz)
+    IndexType cluster_sz, const ValueType eps)
 {
     // Numeric phase (matching reference hash_numeric_cluster)
     int thread_num = Le_get_thread_num();
@@ -207,37 +206,52 @@ void spgemm_Flength_hash_numeric_omp_lb(
                 IndexType col_start = A_cluster.rowptr[cluster_id];
                 IndexType col_end = A_cluster.rowptr[cluster_id + 1];
                 
+                // Declare variables outside inner loops (matching reference implementation for better compiler optimization)
+                IndexType t_acol;
+                ValueType t_aval, t_val;
+                ValueType t_bval;  // Cache bval[k] to avoid repeated memory access
+                
                 // For each column in this cluster
+                // Note: Reference code doesn't check bounds here, assuming valid input
                 for (IndexType j = col_start; j < col_end; ++j) {
-                    IndexType t_acol = A_cluster.colids[j];
+                    t_acol = A_cluster.colids[j];
+                    // Pre-compute base index for A_cluster.values to reduce repeated calculations
+                    IndexType a_val_base = j * cluster_sz;
                     // Multiply with B[t_acol, :]
-                    if (t_acol < c_cols && t_acol < A_cluster.cols) {
-                        for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                            IndexType key = bcol[k];
-                            IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
-                            while (1) {  // Loop for hash probing
-                                if (ht_check[hash] == key) {  // key is already inserted
-                                    // Loop over all rows in the cluster
-                                    for (IndexType l = 0; l < cluster_sz; l++) {
-                                        ValueType t_aval = A_cluster.values[(j * cluster_sz) + l];
-                                        ValueType t_val = t_aval * bval[k];
-                                        ht_value[(hash * cluster_sz) + l] += t_val;
+                    for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
+                        IndexType key = bcol[k];
+                        t_bval = bval[k];  // Cache bval[k] once per iteration
+                        IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
+                        while (1) {  // Loop for hash probing
+                            if (ht_check[hash] == key) {  // key is already inserted
+                                // Loop over all rows in the cluster
+                                // Pre-compute base index for ht_value to reduce repeated calculations
+                                IndexType ht_val_base = hash * cluster_sz;
+                                for (IndexType l = 0; l < cluster_sz; l++) {
+                                    t_aval = A_cluster.values[a_val_base + l];
+                                    // Zero-value check: avoid flop when (A.value[] == 0.0) (matching reference implementation)
+                                    if (std::abs(t_aval) >= eps) {
+                                        t_val = t_aval * t_bval;
+                                        ht_value[ht_val_base + l] += t_val;
                                     }
-                                    break;
                                 }
-                                else if (ht_check[hash] == -1) {  // insert new entry
-                                    ht_check[hash] = key;
-                                    // Loop over all rows in the cluster
-                                    for (IndexType l = 0; l < cluster_sz; l++) {
-                                        ValueType t_aval = A_cluster.values[(j * cluster_sz) + l];
-                                        ValueType t_val = t_aval * bval[k];
-                                        ht_value[(hash * cluster_sz) + l] = t_val;
-                                    }
-                                    break;
+                                break;
+                            }
+                            else if (ht_check[hash] == -1) {  // insert new entry
+                                ht_check[hash] = key;
+                                // Loop over all rows in the cluster
+                                // Pre-compute base index for ht_value to reduce repeated calculations
+                                IndexType ht_val_base = hash * cluster_sz;
+                                for (IndexType l = 0; l < cluster_sz; l++) {
+                                    t_aval = A_cluster.values[a_val_base + l];
+                                    t_val = t_aval * t_bval;
+                                    // ht_value will be automatically initialized by 0.0 if t_val is zero
+                                    ht_value[ht_val_base + l] = t_val;
                                 }
-                                else {
-                                    hash = (hash + 1) & (ht_size - 1);  // (hash + 1) % ht_size
-                                }
+                                break;
+                            }
+                            else {
+                                hash = (hash + 1) & (ht_size - 1);  // (hash + 1) % ht_size
                             }
                         }
                     }
@@ -263,10 +277,10 @@ template void spgemm_Flength_hash_symbolic_omp_lb<int64_t, double>(
     const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN_FlengthCluster<int64_t, double>*);
 
 template void spgemm_Flength_hash_numeric_omp_lb<false, int64_t, float>(
-    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t);
+    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t, const float);
 template void spgemm_Flength_hash_numeric_omp_lb<false, int64_t, double>(
-    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t);
+    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t, const double);
 template void spgemm_Flength_hash_numeric_omp_lb<true, int64_t, float>(
-    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t);
+    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t, const float);
 template void spgemm_Flength_hash_numeric_omp_lb<true, int64_t, double>(
-    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t);
+    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t, const double);

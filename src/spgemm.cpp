@@ -172,6 +172,10 @@ void LeSpGEMM_hash_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_clu
                            const CSR_Matrix<IndexType, ValueType> &B,
                            CSR_FlengthCluster<IndexType, ValueType> &C_cluster)
 {
+    // Create BIN for cluster-level load balancing
+    SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin = 
+        new SpGEMM_BIN_FlengthCluster<IndexType, ValueType>(A_cluster.rows, A_cluster.cluster_sz, MIN_HT_S);
+    
     // Sanity checks
     assert(A_cluster.cols == B.num_rows);
     
@@ -180,57 +184,45 @@ void LeSpGEMM_hash_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_clu
     C_cluster.rows = A_cluster.rows;
     C_cluster.cols = B.num_cols;
     C_cluster.cluster_sz = A_cluster.cluster_sz;
-    C_cluster.nnzc = 0;
-    C_cluster.tag = 0;
     
     // Adapt field names for B matrix
     const IndexType *brpt = B.row_offset;
     const IndexType *bcol = B.col_index;
     const ValueType *bval = B.values;
     
-    // Create BIN for cluster-level load balancing
-    SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin = 
-        new SpGEMM_BIN_FlengthCluster<IndexType, ValueType>(A_cluster.rows, A_cluster.cluster_sz, MIN_HT_S);
-    
     // Set max bin (calls set_intprod_num, set_clusters_offset, set_bin_id)
-    bin->set_max_bin(A_cluster, B, C_cluster.cols);
+    // Matching reference implementation: set_max_bin(a.rowptr, a.colids, b.rowptr, c.cols)
+    bin->set_max_bin(A_cluster.rowptr, A_cluster.colids, brpt, C_cluster.cols);
     
     // Create hash table (thread local)
     bin->create_local_hash_table(C_cluster.cols);
     
     // Allocate cluster pointer (for output CSR_FlengthCluster matrix C)
-    IndexType *crpt = new_array<IndexType>(C_cluster.rows + 1);
-    IndexType c_nnzc = 0;
+    C_cluster.rowptr = new_array<IndexType>(C_cluster.rows + 1);
     
+    // todo： 对比后续代码实现，提高性能
     // Symbolic Phase (matching reference HashSpGEMMCluster)
     spgemm_Flength_hash_symbolic_omp_lb<IndexType, ValueType>(
         A_cluster, brpt, bcol,
         C_cluster.rows, C_cluster.cols,
-        crpt, c_nnzc, bin);
+        C_cluster.rowptr, C_cluster.nnzc, bin);
     
     // Re-adjust bin_id after symbolic phase (to reduce hashtable size)
-    bin->set_bin_id(C_cluster.rows, C_cluster.cols, bin->min_ht_size);
-    
-    C_cluster.nnzc = c_nnzc;
-    C_cluster.rowptr = crpt;
+    bin->set_bin_id(C_cluster.cols, bin->min_ht_size);
     
     // Allocate column indices and values (will be filled in numeric phase)
-    C_cluster.colids = new_array<IndexType>(c_nnzc);
-    C_cluster.values = new_array<ValueType>((size_t)c_nnzc * C_cluster.cluster_sz);
-    
-    // Initialize values array to zero
-    std::fill_n(C_cluster.values, (size_t)c_nnzc * C_cluster.cluster_sz, static_cast<ValueType>(0));
+    C_cluster.colids = new_array<IndexType>(C_cluster.nnzc);
+    C_cluster.values = new_array<ValueType>(C_cluster.nnzc * C_cluster.cluster_sz);
     
     // Numeric Phase (sorting is handled inside numeric phase based on sortOutput template parameter)
     spgemm_Flength_hash_numeric_omp_lb<sortOutput, IndexType, ValueType>(
         A_cluster, brpt, bcol, bval,
         C_cluster.rows, C_cluster.cols,
-        crpt, C_cluster.colids, C_cluster.values, bin, C_cluster.cluster_sz);
+        C_cluster.rowptr, C_cluster.colids, C_cluster.values, bin, C_cluster.cluster_sz);
     
     // Set Matrix_Features fields
     C_cluster.num_rows = C_cluster.rows;
     C_cluster.num_cols = C_cluster.cols;
-    C_cluster.num_nnzs = C_cluster.nnzc * C_cluster.cluster_sz;  // Total number of stored values
     
     // Cleanup
     delete bin;
@@ -243,9 +235,8 @@ void LeSpGEMM_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
                       int kernel_flag)
 {
     // Select implementation based on kernel_flag
-    // kernel_flag = 1: Hash-based cluster-wise method (default)
+    // kernel_flag = 1: Hash-based cluster-wise method (default) hash 计算出来是无序的
     // kernel_flag = 2: Array-based cluster-wise method (future)
-    
     if (kernel_flag == 1) {
         LeSpGEMM_hash_FLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
     } else if (kernel_flag == 2) {

@@ -73,6 +73,6 @@ void spgemm_Flength_hash_numeric_omp_lb(
     IndexType c_clusters, IndexType c_cols,
     const IndexType *crpt, IndexType *ccolids, ValueType *cvalues,
     SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin,
-    IndexType cluster_sz);
+    IndexType cluster_sz, const ValueType eps = 0.000001f);
 
 #endif /* SPGEMM_FLENGTH_HASH_H */
