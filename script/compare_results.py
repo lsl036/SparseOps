@@ -150,12 +150,16 @@ def parse_kernel_arg(kernel_arg):
     elif kernel_arg == "2":
         return "arrayrowwise"
     elif kernel_arg == "3":
+        return "arrayrowwise_opt"
+    elif kernel_arg == "4":
         return "hashflengthcluster"
     # Support string values
     elif kernel_arg == "hashrowwise" or kernel_arg == "hash":
         return "hashrowwise"
     elif kernel_arg == "arrayrowwise" or kernel_arg == "array":
         return "arrayrowwise"
+    elif kernel_arg == "arrayrowwise_opt" or kernel_arg == "array_opt":
+        return "arrayrowwise_opt"
     elif kernel_arg == "hashflengthcluster" or kernel_arg == "hashflength":
         return "hashflengthcluster"
     else:
@@ -169,6 +173,8 @@ def get_kernel_display_name(suffix):
         return "Hash-based row-wise"
     elif suffix == "arrayrowwise":
         return "Array-based row-wise"
+    elif suffix == "arrayrowwise_opt":
+        return "Optimized array-based row-wise"
     elif suffix == "hashflengthcluster":
         return "Hash-based fixed-length cluster"
     else:
@@ -188,6 +194,8 @@ Examples:
   python3 compare_results.py --kernel=2
   python3 compare_results.py --kernel=arrayrowwise
   python3 compare_results.py --kernel=3
+  python3 compare_results.py --kernel=arrayrowwise_opt
+  python3 compare_results.py --kernel=4
   python3 compare_results.py --kernel=hashflengthcluster
         """
     )

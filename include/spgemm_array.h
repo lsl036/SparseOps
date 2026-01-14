@@ -38,6 +38,29 @@ void spgemm_array_symbolic_omp_lb(
     SpGEMM_BIN<IndexType, ValueType> *bin);
 
 /**
+ * @brief Optimized symbolic phase: generate and sort Ccol (HSMU-SpGEMM inspired)
+ *        OpenMP with load balancing using BIN
+ *        This version generates and sorts column indices in symbolic phase,
+ *        eliminating the need for insertion operations in numeric phase.
+ * 
+ * Key optimization:
+ * - Generates sorted Ccol during symbolic phase
+ * - Numeric phase only needs to find position and accumulate (no insertion)
+ * - Better performance for dense rows (no O(n) element shifting)
+ * 
+ * @param cpt Row pointer array (pre-allocated, c_rows + 1 elements)
+ * @param ccol Column index array (will be allocated and filled with sorted columns)
+ * @param c_nnz Total number of non-zeros (output)
+ */
+template <typename IndexType, typename ValueType>
+void spgemm_array_symbolic_new(
+    const IndexType *arpt, const IndexType *acol,
+    const IndexType *brpt, const IndexType *bcol,
+    IndexType c_rows, IndexType c_cols,
+    IndexType *cpt, IndexType *&ccol, IndexType &c_nnz,
+    SpGEMM_BIN<IndexType, ValueType> *bin);
+
+/**
  * @brief Numeric phase: compute values of C = A * B using sorted arrays
  *        OpenMP with load balancing using BIN
  * 
@@ -55,6 +78,30 @@ void spgemm_array_numeric_omp_lb(
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
     IndexType c_rows, IndexType c_cols,
     const IndexType *cpt, IndexType *ccol, ValueType *cval,
+    SpGEMM_BIN<IndexType, ValueType> *bin);
+
+/**
+ * @brief Optimized numeric phase: find position and accumulate (HSMU-SpGEMM inspired)
+ *        OpenMP with load balancing using BIN
+ *        This version uses pre-sorted Ccol from symbolic phase,
+ *        eliminating the need for insertion operations.
+ * 
+ * Key optimization:
+ * - Ccol is already sorted from symbolic phase
+ * - Use binary search to find position in pre-sorted array
+ * - Direct accumulation to cval (no insertion, no temporary arrays)
+ * - Better performance: O(log n) lookup + O(1) accumulate vs O(n) insertion
+ * 
+ * @tparam sortOutput Ignored (ccol is already sorted from symbolic phase)
+ * @param ccol Pre-sorted column index array (from spgemm_array_symbolic_new)
+ * @param cval Values array (will be initialized to 0 and accumulated)
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+void spgemm_array_numeric_new(
+    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
+    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
+    IndexType c_rows, IndexType c_cols,
+    const IndexType *cpt, const IndexType *ccol, ValueType *cval,
     SpGEMM_BIN<IndexType, ValueType> *bin);
 
 /**

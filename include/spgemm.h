@@ -13,7 +13,8 @@
  * @brief Compute C = A * B (SpGEMM) - Row-wise methods only
  *        Supports multiple kernel implementations:
  *        Kernel 1: Hash-based row-wise method (default, OpenMP with load balancing)
- *        Kernel 2: Array-based row-wise method (HSMU-SpGEMM inspired, sorted arrays)
+ *        Kernel 2: Array-based row-wise method (HSMU-SpGEMM inspired, sorted arrays, original version)
+ *        Kernel 3: Optimized array-based row-wise method (HSMU-SpGEMM inspired, pre-sorted Ccol, optimized version)
  *        Note: For cluster-wise methods, use LeSpGEMM_FLength instead
  * 
  * @tparam sortOutput Whether to sort output columns (template parameter)
@@ -22,7 +23,7 @@
  * @param A Input matrix A in CSR format
  * @param B Input matrix B in CSR format  
  * @param C Output matrix C in CSR format (will be allocated)
- * @param kernel_flag Kernel selection flag (1=hash row-wise, 2=array row-wise)
+ * @param kernel_flag Kernel selection flag (1=hash row-wise, 2=array row-wise original, 3=array row-wise optimized)
  */
 template <bool sortOutput = true, typename IndexType, typename ValueType>
 void LeSpGEMM(const CSR_Matrix<IndexType, ValueType> &A,
@@ -69,6 +70,23 @@ void LeSpGEMM_array_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
                             const CSR_Matrix<IndexType, ValueType> &B,
                             CSR_Matrix<IndexType, ValueType> &C,
                             int kernel_flag = 2);
+
+/**
+ * @brief Optimized array-based row-wise SpGEMM implementation (HSMU-SpGEMM inspired)
+ *        Uses pre-sorted Ccol from symbolic phase, eliminating insertion operations
+ *        This is the optimized version using spgemm_array_symbolic_new and spgemm_array_numeric_new
+ * 
+ * Key optimizations:
+ * - Symbolic phase generates and sorts Ccol
+ * - Numeric phase uses binary search to find position (no insertion)
+ * - Better performance for dense rows (no O(n) element shifting)
+ * 
+ * @tparam sortOutput Whether to sort output columns (ignored, ccol is already sorted)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_array_rowwise_new(const CSR_Matrix<IndexType, ValueType> &A,
+                                 const CSR_Matrix<IndexType, ValueType> &B,
+                                 CSR_Matrix<IndexType, ValueType> &C);
 
 /**
  * @brief Fixed-length Cluster-wise SpGEMM implementation

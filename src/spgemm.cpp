@@ -167,6 +167,71 @@ void LeSpGEMM_array_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
     delete bin;
 }
 
+/**
+ * @brief Optimized array-based row-wise SpGEMM implementation
+ *        Uses pre-sorted Ccol from symbolic phase, eliminating insertion operations
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+void LeSpGEMM_array_rowwise_new(const CSR_Matrix<IndexType, ValueType> &A,
+                                 const CSR_Matrix<IndexType, ValueType> &B,
+                                 CSR_Matrix<IndexType, ValueType> &C)
+{
+    // Sanity checks
+    assert(A.num_cols == B.num_rows);
+    
+    // Initialize output matrix
+    C.num_rows = A.num_rows;
+    C.num_cols = B.num_cols;
+    C.num_nnzs = 0;
+    C.kernel_flag = 2; // Array-based method
+    C.tag = 0;
+    C.partition = nullptr;
+    
+    // Adapt field names: CSR_Matrix uses row_offset/col_index/values
+    // Internal functions expect arpt/acol/aval, brpt/bcol/bval
+    const IndexType *arpt = A.row_offset;
+    const IndexType *acol = A.col_index;
+    const ValueType *aval = A.values;
+    
+    const IndexType *brpt = B.row_offset;
+    const IndexType *bcol = B.col_index;
+    const ValueType *bval = B.values;
+    
+    // Create BIN for load balancing
+    SpGEMM_BIN<IndexType, ValueType> *bin = new SpGEMM_BIN<IndexType, ValueType>(A.num_rows, MIN_HT_S);
+    
+    // Set max bin (calls set_intprod_num, set_rows_offset, set_bin_id)
+    bin->set_max_bin(arpt, acol, brpt, C.num_rows, C.num_cols);
+    
+    // Allocate row pointer
+    IndexType *cpt = new_array<IndexType>(C.num_rows + 1);
+    IndexType c_nnz = 0;
+    IndexType *ccol = nullptr; // Will be allocated inside spgemm_array_symbolic_new
+    
+    // Symbolic Phase: generate and sort Ccol (optimized version)
+    // Note: spgemm_array_symbolic_new will allocate ccol internally after scan
+    spgemm_array_symbolic_new<IndexType, ValueType>(arpt, acol, brpt, bcol,
+                                                     C.num_rows, C.num_cols,
+                                                     cpt, ccol, c_nnz, bin);
+    
+    C.num_nnzs = c_nnz;
+    C.row_offset = cpt;
+    C.col_index = ccol;
+    
+    // Allocate values array (will be filled in numeric phase)
+    C.values = new_array<ValueType>(c_nnz);
+    
+    // Numeric Phase: find position and accumulate (optimized version)
+    // Note: sortOutput is ignored since ccol is already sorted from symbolic phase
+    spgemm_array_numeric_new<sortOutput, IndexType, ValueType>(arpt, acol, aval,
+                                                               brpt, bcol, bval,
+                                                               C.num_rows, C.num_cols,
+                                                               cpt, ccol, C.values, bin);
+    
+    // Cleanup
+    delete bin;
+}
+
 template <bool sortOutput, typename IndexType, typename ValueType>
 void LeSpGEMM_hash_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
                            const CSR_Matrix<IndexType, ValueType> &B,
@@ -258,13 +323,18 @@ void LeSpGEMM(const CSR_Matrix<IndexType, ValueType> &A,
 {
     // Select implementation based on kernel_flag
     // kernel_flag = 1: Hash-based row-wise method (default)
-    // kernel_flag = 2: Array-based row-wise method (HSMU-SpGEMM inspired)
+    // kernel_flag = 2: Array-based row-wise method (HSMU-SpGEMM inspired, original version)
+    // kernel_flag = 3: Optimized array-based row-wise method (HSMU-SpGEMM inspired, pre-sorted Ccol, optimized version)
     // Note: For cluster-wise methods, use LeSpGEMM_FLength instead
     
     if (kernel_flag == 1) {
         LeSpGEMM_hash_rowwise<sortOutput, IndexType, ValueType>(A, B, C, kernel_flag);
     } else if (kernel_flag == 2) {
+        // Use original array-based method (HSMU-SpGEMM inspired, using binary search to find position and insert new element if not exists)
         LeSpGEMM_array_rowwise<sortOutput, IndexType, ValueType>(A, B, C, kernel_flag);
+    } else if (kernel_flag == 3) {
+        // Use optimized array-based method (HSMU-SpGEMM inspired, pre-sorted Ccol in symbolic phase, and compute values using binary search)
+        LeSpGEMM_array_rowwise_new<sortOutput, IndexType, ValueType>(A, B, C);
     } else {
         // Default to hash-based row-wise method
         LeSpGEMM_hash_rowwise<sortOutput, IndexType, ValueType>(A, B, C, kernel_flag);
@@ -318,6 +388,23 @@ template void LeSpGEMM_array_rowwise<true, int64_t, double>(
 template void LeSpGEMM_array_rowwise<false, int64_t, double>(
     const CSR_Matrix<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
     CSR_Matrix<int64_t, double>&, int);
+
+// LeSpGEMM_array_rowwise_new instantiations (sortOutput = true and false)
+template void LeSpGEMM_array_rowwise_new<true, int64_t, float>(
+    const CSR_Matrix<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_Matrix<int64_t, float>&);
+template void LeSpGEMM_array_rowwise_new<false, int64_t, float>(
+    const CSR_Matrix<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_Matrix<int64_t, float>&);
+template void LeSpGEMM_array_rowwise_new<true, int64_t, double>(
+    const CSR_Matrix<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_Matrix<int64_t, double>&);
+template void LeSpGEMM_array_rowwise_new<false, int64_t, double>(
+    const CSR_Matrix<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_Matrix<int64_t, double>&);
+
+// Note: LeSpGEMM_array_rowwise_new is implicitly instantiated through LeSpGEMM
+// No explicit instantiation needed to avoid duplication
 
 // LeSpGEMM_hash_FLength instantiations (sortOutput = true and false)
 template void LeSpGEMM_hash_FLength<true, int64_t, float>(
