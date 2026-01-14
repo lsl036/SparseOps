@@ -197,13 +197,13 @@ void spgemm_array_symbolic_omp_lb(
     // Symbolic phase: count unique columns per row using sorted arrays
     // Note: We don't use bin_id here, only row_nz and rows_offset
     
-    int thread_num = Le_get_thread_num();
+    // int thread_num = Le_get_thread_num();
     
     // Allocate temporary arrays for each thread
     // Each thread needs a buffer to store unique columns for one row at a time
     // We'll use a vector that can grow, but try to estimate max size
     
-    #pragma omp parallel num_threads(thread_num)
+    #pragma omp parallel num_threads(bin->allocated_thread_num)
     {
         int tid = Le_get_thread_id();
         IndexType start_row = bin->rows_offset[tid];
@@ -266,9 +266,9 @@ void spgemm_array_numeric_omp_lb(
     // Note: We don't use bin_id here, only row_nz and rows_offset
     // Array size for each row = row_nz[i] (exact size, no padding)
     
-    int thread_num = Le_get_thread_num();
+    // int thread_num = Le_get_thread_num();
     
-    #pragma omp parallel num_threads(thread_num)
+    #pragma omp parallel num_threads(bin->allocated_thread_num)
     {
         int tid = Le_get_thread_id();
         IndexType start_row = bin->rows_offset[tid];

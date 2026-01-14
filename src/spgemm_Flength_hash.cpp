@@ -200,7 +200,7 @@ void spgemm_Flength_hash_numeric_omp_lb(
                 ValueType t_bval;  // Cache bval[k] to avoid repeated memory access
                 
                 // For each column in this cluster
-                // Note: Reference code doesn't check bounds here, assuming valid input
+                // reuse col-index of A, then rows of matrix B have cache locality
                 for (IndexType j = col_start; j < col_end; ++j) {
                     t_acol = A_cluster.colids[j];
                     // Pre-compute base index for A_cluster.values to reduce repeated calculations
