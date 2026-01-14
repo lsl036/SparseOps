@@ -83,10 +83,11 @@ COO_Matrix<IndexType,ValueType> read_coo_matrix(const char * mm_filename)
         {
             if constexpr(std::is_same<IndexType, int>::value) {
                 assert(fscanf(fid,"%d %d\n", &(coo.row_index[i]), &(coo.col_index[i])) == 2);
-            } else {
-                // For int64_t (which may be long or long long), use %ld or %lld
-                // Use %ld for both long and long long (works on most systems)
+            } else if constexpr(std::is_same<IndexType, long>::value) {
                 assert(fscanf(fid,"%ld %ld\n", &(coo.row_index[i]), &(coo.col_index[i])) == 2);
+            } else {
+                // For long long or int64_t, use %lld
+                assert(fscanf(fid,"%lld %lld\n", &(coo.row_index[i]), &(coo.col_index[i])) == 2);
             }
             // adjust from 1-based to 0-based indexing
             --coo.row_index[i];
@@ -100,10 +101,11 @@ COO_Matrix<IndexType,ValueType> read_coo_matrix(const char * mm_filename)
 
             if constexpr(std::is_same<IndexType, int>::value) {
                 assert(fscanf(fid, "%d %d %lf\n", &row_id, &col_id, &V) == 3);
-            } else {
-                // For int64_t (which may be long or long long), use %ld or %lld
-                // Use %ld for both long and long long (works on most systems)
+            } else if constexpr(std::is_same<IndexType, long>::value) {
                 assert(fscanf(fid, "%ld %ld %lf\n", &row_id, &col_id, &V) == 3);
+            } else {
+                // For long long or int64_t, use %lld
+                assert(fscanf(fid, "%lld %lld %lf\n", &row_id, &col_id, &V) == 3);
             }
 
             coo.row_index[i] = (IndexType) row_id - 1;

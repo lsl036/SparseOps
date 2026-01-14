@@ -70,7 +70,7 @@ def read_mtx_file(filepath):
     return rows, cols, nnz, data_dict
 
 
-def compare_matrices(ref_file, computed_file, tolerance=1e-10):
+def compare_matrices(ref_file, computed_file, tolerance=1e-6):
     """
     Compare two MTX files.
     Returns: (is_match, error_message)

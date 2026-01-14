@@ -7,26 +7,9 @@
  */
 
 #include "../include/spgemm_cluster.h"
+#include "../include/spgemm_utility.h"
 #include <cmath>
 #include <algorithm>
-
-// Helper function: prefix sum (scan)
-template <typename IndexType>
-inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
-    output[0] = 0;
-    for (IndexType i = 1; i < n; i++) {
-        output[i] = output[i - 1] + input[i - 1];
-    }
-}
-
-// Helper function: prefix sum with multiplier (matching reference scan function)
-template <typename IndexType>
-inline void scan_spgemm_mult(const IndexType *input, IndexType *output, IndexType multiplier, IndexType n) {
-    output[0] = 0;
-    for (IndexType i = 1; i < n; i++) {
-        output[i] = output[i - 1] + (input[i - 1] * multiplier);
-    }
-}
 
 // ============================================================================
 // Fixed-length Cluster BIN Structure
@@ -149,7 +132,7 @@ void SpGEMM_BIN_FlengthCluster<IndexType, ValueType>::set_clusters_offset()
     // Prefix sum of cluster_nz with multiplier cluster_sz (matching reference scan function)
     // This computes prefix sum of (cluster_nz[i] * cluster_sz) for load balancing
     IndexType *ps_cluster_nz = new_array<IndexType>(num_clusters + 1);
-    scan_spgemm_mult(cluster_nz, ps_cluster_nz, cluster_sz, num_clusters + 1);
+    scan(cluster_nz, ps_cluster_nz, cluster_sz, num_clusters + 1, allocated_thread_num);
     
     // Calculate average work per thread using total_intprod (matching reference implementation)
     // total_intprod = sum(cluster_nz[i] * cluster_sz) for all clusters

@@ -7,6 +7,7 @@
  */
 
 #include "../include/spgemm_Flength_hash.h"
+#include "../include/spgemm_utility.h"
 #include <cstring>
 #include <vector>
 #include <algorithm>
@@ -14,15 +15,6 @@
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-// Helper function: prefix sum (scan) - same as in spgemm_bin.cpp
-template <typename IndexType>
-inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
-    output[0] = 0;
-    for (IndexType i = 1; i < n; i++) {
-        output[i] = output[i - 1] + input[i - 1];
-    }
-}
 
 /**
  * @brief Sort function for pairs (matching reference implementation)
@@ -95,22 +87,18 @@ void spgemm_Flength_hash_symbolic_omp_lb(
     IndexType c_clusters, IndexType c_cols,
     IndexType *crpt, IndexType &c_nnzc,
     SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin)
-{
-    // Use BIN's hash tables
-    if (bin->local_hash_table_id == nullptr) {
-        bin->create_local_hash_table(c_cols);
-    }
-    
+{   
     // Symbolic phase: count unique column IDs per cluster (matching reference hash_symbolic_kernel_cluster)
-    int thread_num = Le_get_thread_num();
-    #pragma omp parallel num_threads(thread_num)
+    // int thread_num = Le_get_thread_num();
+    #pragma omp parallel num_threads(bin->allocated_thread_num)
     {
         int tid = Le_get_thread_id();
         IndexType start_cluster = bin->clusters_offset[tid];
         IndexType end_cluster = bin->clusters_offset[tid + 1];
         
         IndexType *check = bin->local_hash_table_id[tid];
-        
+        IndexType t_acol, key, hash;
+
         // Process each cluster assigned to this thread
         for (IndexType cluster_id = start_cluster; cluster_id < end_cluster; ++cluster_id) {
             IndexType bid = bin->bin_id[cluster_id];
@@ -132,11 +120,11 @@ void spgemm_Flength_hash_symbolic_omp_lb(
                 // For each column in this cluster, collect unique column IDs from B
                 // Note: Reference code doesn't check bounds here, assuming valid input
                 for (IndexType j = col_start; j < col_end; ++j) {
-                    IndexType t_acol = A_cluster.colids[j];
+                    t_acol = A_cluster.colids[j];
                     // Multiply with B[t_acol, :]
                     for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                        IndexType key = bcol[k];
-                        IndexType hash = (key * HASH_SCAL) & (ht_size - 1);
+                        key = bcol[k];
+                        hash = (key * HASH_SCAL) & (ht_size - 1);
                         while (1) {  // Loop for hash probing
                             if (check[hash] == key) {  // if the key is already inserted, it's ok
                                 break;
@@ -159,7 +147,7 @@ void spgemm_Flength_hash_symbolic_omp_lb(
     }
     
     // Set cluster pointer of matrix C using scan (matching reference hash_symbolic_cluster)
-    scan_spgemm(bin->cluster_nz, crpt, c_clusters + 1);
+    scan(bin->cluster_nz, crpt, c_clusters + 1, bin->allocated_thread_num);
     c_nnzc = crpt[c_clusters];
 }
 
@@ -177,8 +165,8 @@ void spgemm_Flength_hash_numeric_omp_lb(
     IndexType cluster_sz, const ValueType eps)
 {
     // Numeric phase (matching reference hash_numeric_cluster)
-    int thread_num = Le_get_thread_num();
-    #pragma omp parallel num_threads(thread_num)
+    // int thread_num = Le_get_thread_num();
+    #pragma omp parallel num_threads(bin->allocated_thread_num)
     {
         int tid = Le_get_thread_id();
         IndexType start_cluster = bin->clusters_offset[tid];

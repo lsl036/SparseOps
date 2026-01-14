@@ -7,6 +7,7 @@
  */
 
 #include "../include/spgemm_hash.h"
+#include "../include/spgemm_utility.h"
 #include <cstring>
 #include <vector>
 #include <algorithm>
@@ -14,15 +15,6 @@
 // ============================================================================
 // Symbolic Phase Implementations
 // ============================================================================
-
-// Helper function: prefix sum (scan) - same as in spgemm_bin.cpp
-template <typename IndexType>
-inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
-    output[0] = 0;
-    for (IndexType i = 1; i < n; i++) {
-        output[i] = output[i - 1] + input[i - 1];
-    }
-}
 
 template <typename IndexType, typename ValueType>
 void spgemm_hash_symbolic_omp_lb(
@@ -84,7 +76,7 @@ void spgemm_hash_symbolic_omp_lb(
     }
     
     // Set row pointer of matrix C using scan (matching reference hash_symbolic)
-    scan_spgemm(bin->row_nz, cpt, c_rows + 1);
+    scan(bin->row_nz, cpt, c_rows + 1, bin->allocated_thread_num);
     c_nnz = cpt[c_rows];
 }
 

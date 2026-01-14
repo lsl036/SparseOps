@@ -62,7 +62,10 @@ void mklcsr_baseline(int argc, char **argv)
 
     timer time_one_iteration;
     // warmup
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     mkl_dcsrmv(&transa, &csr.num_rows, &csr.num_cols, &alpha, "G**C", csr.values, csr.col_index, csr.row_offset, csr.row_offset + 1, x_host, &beta, y_host);
+    #pragma GCC diagnostic pop
     double estimated_time = time_one_iteration.milliseconds_elapsed();
 
     // determine # of seconds dynamically
@@ -76,8 +79,11 @@ void mklcsr_baseline(int argc, char **argv)
 
     // time several SpMV iterations
     timer t;
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     for(int i = 0; i < num_iterations; i++)
        mkl_dcsrmv(&transa, &csr.num_rows, &csr.num_cols, &alpha, "G**C", csr.values, csr.col_index, csr.row_offset, csr.row_offset + 1, x_host, &beta, y_host); // alpha = 1, beta = 0;
+    #pragma GCC diagnostic pop
 
     double msec_per_iteration = t.milliseconds_elapsed() / (double) num_iterations;
     double sec_per_iteration = msec_per_iteration / 1000.0;

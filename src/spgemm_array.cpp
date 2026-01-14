@@ -7,6 +7,7 @@
  */
 
 #include "../include/spgemm_array.h"
+#include "../include/spgemm_utility.h"
 #include <cstring>
 #include <vector>
 #include <algorithm>
@@ -15,16 +16,6 @@
 // Helper Functions
 // ============================================================================
 
-/**
- * @brief Helper: Prefix sum (scan) - same as in spgemm_hash.cpp
- */
-template <typename IndexType>
-inline void scan_spgemm(const IndexType *input, IndexType *output, IndexType n) {
-    output[0] = 0;
-    for (IndexType i = 1; i < n; i++) {
-        output[i] = output[i - 1] + input[i - 1];
-    }
-}
 
 /**
  * @brief Binary search to find position for insertion in sorted array
@@ -255,7 +246,7 @@ void spgemm_array_symbolic_omp_lb(
     }
     
     // Set row pointer of matrix C using scan
-    scan_spgemm(bin->row_nz, cpt, c_rows + 1);
+    scan(bin->row_nz, cpt, c_rows + 1, bin->allocated_thread_num);
     c_nnz = cpt[c_rows];
 }
 
