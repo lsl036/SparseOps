@@ -9,6 +9,7 @@
 #include "../include/spgemm.h"
 #include "../include/spgemm_array.h"
 #include "../include/spgemm_Flength_hash.h"
+#include "../include/spgemm_Flength_array.h"
 #include "../include/sparse_conversion.h"
 #include "../include/sparse_operation.h"
 #include <cassert>
@@ -286,7 +287,69 @@ void LeSpGEMM_hash_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_clu
         C_cluster.rowptr, C_cluster.colids, C_cluster.values, bin, C_cluster.cluster_sz);
     
     // Set Matrix_Features fields
-    C_cluster.num_rows = C_cluster.rows;
+    // num_rows should be the actual matrix rows (csr_rows), not the number of clusters (rows)
+    C_cluster.num_rows = C_cluster.csr_rows;
+    C_cluster.num_cols = C_cluster.cols;
+    
+    // Cleanup
+    delete bin;
+}
+
+template <bool sortOutput, typename IndexType, typename ValueType>
+void LeSpGEMM_array_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+                            const CSR_Matrix<IndexType, ValueType> &B,
+                            CSR_FlengthCluster<IndexType, ValueType> &C_cluster)
+{
+    // Create BIN for cluster-level load balancing
+    SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin = 
+        new SpGEMM_BIN_FlengthCluster<IndexType, ValueType>(A_cluster.rows, A_cluster.cluster_sz, MIN_HT_S);
+    
+    // Sanity checks
+    assert(A_cluster.cols == B.num_rows);
+    
+    // Initialize output cluster matrix
+    C_cluster.csr_rows = A_cluster.csr_rows;
+    C_cluster.rows = A_cluster.rows;
+    C_cluster.cols = B.num_cols;
+    C_cluster.cluster_sz = A_cluster.cluster_sz;
+    
+    // Adapt field names for B matrix
+    const IndexType *brpt = B.row_offset;
+    const IndexType *bcol = B.col_index;
+    const ValueType *bval = B.values;
+    
+    // Set max bin (calls set_intprod_num, set_clusters_offset, set_bin_id)
+    // Matching reference implementation: set_max_bin(a.rowptr, a.colids, b.rowptr, c.cols)
+    bin->set_max_bin(A_cluster.rowptr, A_cluster.colids, brpt, C_cluster.cols);
+    
+    // Note: Array-based method does NOT need create_local_hash_table
+    // Each cluster will use sorted arrays instead of hash tables
+    
+    // Allocate cluster pointer (for output CSR_FlengthCluster matrix C)
+    C_cluster.rowptr = new_array<IndexType>(C_cluster.rows + 1);
+    
+    // Symbolic Phase: generate and sort Ccolids (optimized version)
+    // Note: spgemm_Flength_array_symbolic_new will allocate ccolids internally after scan
+    spgemm_Flength_array_symbolic_new<IndexType, ValueType>(
+        A_cluster, brpt, bcol,
+        C_cluster.rows, C_cluster.cols,
+        C_cluster.rowptr, C_cluster.colids, C_cluster.nnzc, bin);
+    
+    // Allocate values array (will be filled in numeric phase)
+    // Each column needs cluster_sz values (one per row in cluster)
+    C_cluster.values = new_array<ValueType>(C_cluster.nnzc * C_cluster.cluster_sz);
+    
+    // Numeric Phase: find position and accumulate (optimized version)
+    // Note: sortOutput is ignored since ccolids is already sorted from symbolic phase
+    spgemm_Flength_array_numeric_new<sortOutput, IndexType, ValueType>(
+        A_cluster, brpt, bcol, bval,
+        C_cluster.rows, C_cluster.cols,
+        C_cluster.rowptr, C_cluster.colids, C_cluster.values,
+        C_cluster.cluster_sz, bin);
+    
+    // Set Matrix_Features fields
+    // num_rows should be the actual matrix rows (csr_rows), not the number of clusters (rows)
+    C_cluster.num_rows = C_cluster.csr_rows;
     C_cluster.num_cols = C_cluster.cols;
     
     // Cleanup
@@ -300,15 +363,13 @@ void LeSpGEMM_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
                       int kernel_flag)
 {
     // Select implementation based on kernel_flag
-    // kernel_flag = 1: Hash-based cluster-wise method (default) hash 计算出来是无序的
-    // kernel_flag = 2: Array-based cluster-wise method (future)
+    // kernel_flag = 1: Hash-based cluster-wise method (default)
+    // kernel_flag = 2: Array-based cluster-wise method (HSMU-SpGEMM inspired, sorted arrays)
     if (kernel_flag == 1) {
         LeSpGEMM_hash_FLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
     } else if (kernel_flag == 2) {
-        // Future: Array-based cluster-wise method
-        // LeSpGEMM_array_FLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
-        // For now, default to hash-based
-        LeSpGEMM_hash_FLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
+        // Array-based cluster-wise method (HSMU-SpGEMM inspired)
+        LeSpGEMM_array_FLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
     } else {
         // Default to hash-based cluster-wise method
         LeSpGEMM_hash_FLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
@@ -417,6 +478,20 @@ template void LeSpGEMM_hash_FLength<true, int64_t, double>(
     const CSR_FlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
     CSR_FlengthCluster<int64_t, double>&);
 template void LeSpGEMM_hash_FLength<false, int64_t, double>(
+    const CSR_FlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_FlengthCluster<int64_t, double>&);
+
+// LeSpGEMM_array_FLength instantiations (sortOutput = true and false)
+template void LeSpGEMM_array_FLength<true, int64_t, float>(
+    const CSR_FlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_FlengthCluster<int64_t, float>&);
+template void LeSpGEMM_array_FLength<false, int64_t, float>(
+    const CSR_FlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_FlengthCluster<int64_t, float>&);
+template void LeSpGEMM_array_FLength<true, int64_t, double>(
+    const CSR_FlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_FlengthCluster<int64_t, double>&);
+template void LeSpGEMM_array_FLength<false, int64_t, double>(
     const CSR_FlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
     CSR_FlengthCluster<int64_t, double>&);
 

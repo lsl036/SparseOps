@@ -126,5 +126,28 @@ void LeSpGEMM_hash_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_clu
                            const CSR_Matrix<IndexType, ValueType> &B,
                            CSR_FlengthCluster<IndexType, ValueType> &C_cluster);
 
+/**
+ * @brief Array-based Fixed-length Cluster-wise SpGEMM implementation
+ *        Uses sorted arrays for accumulation at cluster level (kernel_flag = 2)
+ *        This is a sub-interface called by LeSpGEMM_FLength
+ * 
+ * Key differences from hash-based method:
+ * - Uses sorted arrays instead of hash tables (no hash collisions)
+ * - Array size = exact cluster_nz (no 2^N padding, better memory efficiency)
+ * - Natural sorting during symbolic phase (no extra sort step needed)
+ * - Binary search for O(log n) lookup in numeric phase
+ * 
+ * @tparam sortOutput Ignored (ccolids is already sorted from symbolic phase)
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_FlengthCluster format
+ * @param B Input matrix B in CSR_Matrix format
+ * @param C_cluster Output matrix C in CSR_FlengthCluster format (will be allocated)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_array_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+                            const CSR_Matrix<IndexType, ValueType> &B,
+                            CSR_FlengthCluster<IndexType, ValueType> &C_cluster);
+
 #endif /* SPGEMM_H */
 

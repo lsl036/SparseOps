@@ -2,14 +2,15 @@
 """
 Matrix comparison script for Fixed-length Cluster SpGEMM results validation.
 Compares computed results with reference results.
-Supports kernel 1 (hash-based fixed-length cluster).
+Supports kernel 1 (hash-based fixed-length cluster) and kernel 2 (array-based fixed-length cluster).
 
 Usage:
     python3 compare_results_flength.py [--kernel=1|hashflengthcluster]
     
     --kernel: Select kernel to compare (default: 1)
               1 or hashflengthcluster: Hash-based fixed-length cluster kernel
-"""
+              2 or arrayflengthcluster: Array-based fixed-length cluster kernel
+""" 
 
 import sys
 import os
@@ -149,6 +150,10 @@ def parse_kernel_arg(kernel_arg):
     # Support string values
     elif kernel_arg == "hashflengthcluster" or kernel_arg == "hashflength":
         return "hashflengthcluster"
+    elif kernel_arg == "2":
+        return "arrayflengthcluster"
+    elif kernel_arg == "arrayflengthcluster" or kernel_arg == "arrayflength":
+        return "arrayflengthcluster"
     else:
         print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashflengthcluster")
         return "hashflengthcluster"
@@ -158,6 +163,8 @@ def get_kernel_display_name(suffix):
     """Get human-readable kernel name from suffix."""
     if suffix == "hashflengthcluster":
         return "Hash-based fixed-length cluster"
+    elif suffix == "arrayflengthcluster":
+        return "Array-based fixed-length cluster"
     else:
         return f"Unknown ({suffix})"
 
@@ -172,13 +179,15 @@ def main():
 Examples:
   python3 compare_results_flength.py --kernel=1
   python3 compare_results_flength.py --kernel=hashflengthcluster
+  python3 compare_results_flength.py --kernel=2
+  python3 compare_results_flength.py --kernel=arrayflengthcluster
         """
     )
     parser.add_argument(
         "--kernel",
         type=str,
         default="1",
-        help="Kernel to compare: 1 or hashflengthcluster (Hash-based fixed-length cluster, default)"
+        help="Kernel to compare: 1 or hashflengthcluster (Hash-based fixed-length cluster, default) or 2 or arrayflengthcluster (Array-based fixed-length cluster)"
     )
     
     args = parser.parse_args()

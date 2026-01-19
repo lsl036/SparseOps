@@ -112,6 +112,20 @@ template <typename IndexType>
 IndexType binary_search_pos(const IndexType *arr, IndexType size, IndexType key);
 
 /**
+ * @brief Helper: Binary search to find position of key in sorted array (numeric phase)
+ *        Returns the index if found, or -1 if not found
+ *        Used for finding position in pre-sorted Ccol array
+ *        Optimized: uses linear search for small arrays (< 32) for better cache performance
+ * 
+ * @param arr Sorted array
+ * @param size Array size
+ * @param key Key to search for
+ * @return Index of key if found, -1 if not found
+ */
+template <typename IndexType>
+IndexType binary_search_find(const IndexType *arr, IndexType size, IndexType key);
+
+/**
  * @brief Helper: Insert or accumulate in sorted array (numeric phase)
  * @param arr_col Column indices array (sorted)
  * @param arr_val Values array

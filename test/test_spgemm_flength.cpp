@@ -35,7 +35,7 @@ void usage(int argc, char** argv)
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
     std::cout << "\t" << " --test_type = correctness or performance (default)\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
-    std::cout << "\t" << " --kernel    = 1 (Hash-based cluster-wise:default)\n";
+    std::cout << "\t" << " --kernel    = 1 (Hash-based cluster-wise:default) or 2 (Array-based cluster-wise)\n";
     std::cout << "\t" << " --cluster_sz= cluster size (default: 8)\n";
     std::cout << "\t" << " --sort      = 0 (no sort:default) or 1 (sort output columns)\n";
     std::cout << "Note: Matrix files must be real-valued sparse matrices in the MatrixMarket file format.\n";
@@ -74,6 +74,8 @@ void test_spgemm_flength_correctness(const char *matA_path, const char *matB_pat
     cout << "\n--- Testing Kernel " << kernel_flag << " ---" << endl;
     if (kernel_flag == 1) {
         cout << "Kernel: Hash-based cluster-wise SpGEMM (OpenMP with load balancing)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << "Kernel: Array-based cluster-wise SpGEMM (HSMU-SpGEMM inspired, sorted arrays)" << endl;
     } else {
         cout << "Kernel: Unknown kernel flag, defaulting to Hash-based cluster-wise" << endl;
     }
@@ -215,6 +217,8 @@ void test_spgemm_flength_performance(const char *matA_path, const char *matB_pat
     cout << "\n--- Kernel " << kernel_flag << " Performance ---" << endl;
     if (kernel_flag == 1) {
         cout << "Kernel: Hash-based cluster-wise SpGEMM (OpenMP with load balancing)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << "Kernel: Array-based cluster-wise SpGEMM (HSMU-SpGEMM inspired, sorted arrays)" << endl;
     } else {
         cout << "Kernel: Unknown kernel flag, defaulting to Hash-based cluster-wise" << endl;
     }
@@ -318,8 +322,8 @@ void run_spgemm_flength_test(int argc, char **argv)
     char *kernel_str = get_argval(argc, argv, "kernel");
     if(kernel_str != NULL) {
         kernel_flag = atoi(kernel_str);
-        if(kernel_flag != 1) {
-            printf("Error: kernel must be 1 (Hash-based cluster-wise)\n");
+        if(kernel_flag != 1 && kernel_flag != 2) {
+            printf("Error: kernel must be 1 (Hash-based cluster-wise) or 2 (Array-based cluster-wise)\n");
             return;
         }
     }
@@ -343,7 +347,14 @@ void run_spgemm_flength_test(int argc, char **argv)
     cout << "Matrix A: " << matA_path << endl;
     cout << "Matrix B: " << matB_path << endl;
     cout << "Test type: " << test_type << endl;
-    cout << "Kernel: " << kernel_flag << " (Hash-based cluster-wise)" << endl;
+    cout << "Kernel: " << kernel_flag;
+    if (kernel_flag == 1) {
+        cout << " (Hash-based cluster-wise)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << " (Array-based cluster-wise)" << endl;
+    } else {
+        cout << " (Unknown, defaulting to Hash-based cluster-wise)" << endl;
+    }
     cout << "Cluster size: " << cluster_sz << endl;
     cout << "Sort output: " << (sortOutput ? "yes" : "no") << endl;
     cout << "Threads: " << Le_get_thread_num() << endl;
