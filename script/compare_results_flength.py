@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Matrix comparison script for SpGEMM results validation.
+Matrix comparison script for Fixed-length Cluster SpGEMM results validation.
 Compares computed results with reference results.
-Since columns are not sorted, we compare row-wise non-zero elements.
+Supports kernel 1 (hash-based fixed-length cluster).
 
 Usage:
-    python3 compare_results.py [--kernel=1|2|hashrowwise|arrayrowwise]
+    python3 compare_results_flength.py [--kernel=1|hashflengthcluster]
     
     --kernel: Select kernel to compare (default: 1)
-              1 or hashrowwise: Hash-based row-wise kernel
-              2 or arrayrowwise: Array-based row-wise kernel
+              1 or hashflengthcluster: Hash-based fixed-length cluster kernel
 """
 
 import sys
@@ -137,45 +136,27 @@ def compare_matrices(ref_file, computed_file, tolerance=1e-6):
 def parse_kernel_arg(kernel_arg):
     """
     Parse kernel argument and return suffix string.
-    Returns: suffix string (e.g., "hashrowwise" or "arrayrowwise")
+    Returns: suffix string (e.g., "hashflengthcluster")
     """
     if kernel_arg is None:
-        return "hashrowwise"  # Default to kernel 1
+        return "hashflengthcluster"  # Default to kernel 1
     
     kernel_arg = str(kernel_arg).lower()
     
     # Support numeric values
     if kernel_arg == "1":
-        return "hashrowwise"
-    elif kernel_arg == "2":
-        return "arrayrowwise"
-    elif kernel_arg == "3":
-        return "arrayrowwise_opt"
-    elif kernel_arg == "4":
         return "hashflengthcluster"
     # Support string values
-    elif kernel_arg == "hashrowwise" or kernel_arg == "hash":
-        return "hashrowwise"
-    elif kernel_arg == "arrayrowwise" or kernel_arg == "array":
-        return "arrayrowwise"
-    elif kernel_arg == "arrayrowwise_opt" or kernel_arg == "array_opt":
-        return "arrayrowwise_opt"
     elif kernel_arg == "hashflengthcluster" or kernel_arg == "hashflength":
         return "hashflengthcluster"
     else:
-        print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashrowwise")
-        return "hashrowwise"
+        print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashflengthcluster")
+        return "hashflengthcluster"
 
 
 def get_kernel_display_name(suffix):
     """Get human-readable kernel name from suffix."""
-    if suffix == "hashrowwise":
-        return "Hash-based row-wise"
-    elif suffix == "arrayrowwise":
-        return "Array-based row-wise"
-    elif suffix == "arrayrowwise_opt":
-        return "Optimized array-based row-wise"
-    elif suffix == "hashflengthcluster":
+    if suffix == "hashflengthcluster":
         return "Hash-based fixed-length cluster"
     else:
         return f"Unknown ({suffix})"
@@ -185,26 +166,19 @@ def main():
     """Main function to compare matrices."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="Compare SpGEMM computed results with reference results",
+        description="Compare Fixed-length Cluster SpGEMM computed results with reference results",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 compare_results.py --kernel=1
-  python3 compare_results.py --kernel=hashrowwise
-  python3 compare_results.py --kernel=2
-  python3 compare_results.py --kernel=arrayrowwise
-  python3 compare_results.py --kernel=3
-  python3 compare_results.py --kernel=arrayrowwise_opt
-  python3 compare_results.py --kernel=4
-  python3 compare_results.py --kernel=hashflengthcluster
+  python3 compare_results_flength.py --kernel=1
+  python3 compare_results_flength.py --kernel=hashflengthcluster
         """
     )
     parser.add_argument(
         "--kernel",
         type=str,
         default="1",
-        help="Kernel to compare: 1 or hashrowwise (Hash-based row-wise, default), "
-             "2 or arrayrowwise (Array-based row-wise)"
+        help="Kernel to compare: 1 or hashflengthcluster (Hash-based fixed-length cluster, default)"
     )
     
     args = parser.parse_args()
@@ -212,7 +186,7 @@ Examples:
     kernel_display = get_kernel_display_name(kernel_suffix)
     
     print("=" * 60)
-    print("SpGEMM Result Validation")
+    print("Fixed-length Cluster SpGEMM Result Validation")
     print("=" * 60)
     print(f"Kernel: {kernel_display} (suffix: {kernel_suffix})")
     print()
@@ -247,7 +221,7 @@ Examples:
             print(f"       Searched in:")
             print(f"         - {os.path.join(SCRIPT_DIR, comp_filename)}")
             print(f"         - {os.path.join(BASE_DIR, 'build', comp_filename)}")
-            print(f"       Please run test_spgemm with --kernel={args.kernel} first to generate the result.")
+            print(f"       Please run test_spgemm_flength with --kernel={args.kernel} first to generate the result.")
             all_passed = False
             continue
         
@@ -274,4 +248,3 @@ Examples:
 
 if __name__ == "__main__":
     sys.exit(main())
-

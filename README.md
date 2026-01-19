@@ -44,3 +44,25 @@ Then you will get some test routines of different SpMV algorithms. If some compi
 - SELL-c- $\sigma$ : Sliced ELL format with $\sigma$ slice for reordering. **Parameters: chunk width C, slice width $\sigma$**.
 - SELL-c-R : Here the $\sigma=R$, reorder the whole matrix rows without sliced tiles.
 
+### Test Correctness of SpGEMM
+
+- Row-wise SpGEMM kernels:
+
+Finished make all stuffs:
+``` 
+python3 run_rowwise_spgemm.py --kernel=1 (1, 2 or 3 for different row-wise kernels)
+```
+Then the C matrix will be writte，then you can run (the correct results should be stored in `script/`):
+```
+python3 ../script/compare_results_rowwise.py --kernel=1 (1, 2 or 3 corresponding above)
+```
+
+- Fixed-lengrh Cluster SpGEMM kernels:
+
+1-hash kernel ; 2-array kernel. 
+``` 
+python3 run_fcluster_spgemm.py --kernel=1 (1, 2)
+
+python3 ../script/compare_results_flength.py --kernel=1 (1, 2)
+```
+
