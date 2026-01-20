@@ -23,7 +23,7 @@
  * @param A Input matrix A in CSR format
  * @param B Input matrix B in CSR format  
  * @param C Output matrix C in CSR format (will be allocated)
- * @param kernel_flag Kernel selection flag (1=hash row-wise, 2=array row-wise optimized)
+ * @param kernel_flag Kernel selection flag (1=hash row-wise, 2=array row-wise optimized, 3=SPA-based array row-wise)
  */
 template <bool sortOutput = true, typename IndexType, typename ValueType>
 void LeSpGEMM(const CSR_Matrix<IndexType, ValueType> &A,
@@ -74,6 +74,28 @@ template <bool sortOutput = true, typename IndexType, typename ValueType>
 void LeSpGEMM_array_rowwise_new(const CSR_Matrix<IndexType, ValueType> &A,
                                  const CSR_Matrix<IndexType, ValueType> &B,
                                  CSR_Matrix<IndexType, ValueType> &C);
+
+/**
+ * @brief SPA-based array row-wise SpGEMM implementation (HSMU-SpGEMM inspired)
+ *        Uses Sparse Accumulator (SPA) for O(1) access in numeric phase
+ *        This is the fastest version using spgemm_array_symbolic_new and spgemm_spa_numeric
+ * 
+ * Key optimizations:
+ * - Symbolic phase generates and sorts Ccol (same as array_rowwise_new)
+ * - Numeric phase uses dense SPA array for O(1) direct access (no binary search)
+ * - Eliminates lookup overhead completely
+ * - Better cache locality for accumulation
+ * 
+ * Memory trade-off:
+ * - Requires O(c_cols) memory per thread for SPA
+ * - Best performance for dense rows or when c_cols is manageable
+ * 
+ * @tparam sortOutput Whether to sort output columns (ignored, ccol is already sorted)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_spa_rowwise(const CSR_Matrix<IndexType, ValueType> &A,
+                          const CSR_Matrix<IndexType, ValueType> &B,
+                          CSR_Matrix<IndexType, ValueType> &C);
 
 /**
  * @brief Fixed-length Cluster-wise SpGEMM implementation

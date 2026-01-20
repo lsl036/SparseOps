@@ -33,7 +33,7 @@ void usage(int argc, char** argv)
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
     std::cout << "\t" << " --test_type = correctness or performance (default)\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
-    std::cout << "\t" << " --kernel    = 1 (Hash-based row-wise:default) or 2 (Array-based row-wise optimized)\n";
+    std::cout << "\t" << " --kernel    = 1 (Hash-based row-wise:default), 2 (Array-based row-wise optimized), or 3 (SPA-based array row-wise)\n";
     std::cout << "\t" << "Note: For cluster-wise methods, use test_spgemm_flength instead\n";
     std::cout << "\t" << " --sort      = 0 (no sort:default) or 1 (sort output columns)\n";
     std::cout << "Note: Matrix files must be real-valued sparse matrices in the MatrixMarket file format.\n";
@@ -67,6 +67,8 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
         cout << "Kernel: Hash-based row-wise SpGEMM (OpenMP with load balancing)" << endl;
     } else if (kernel_flag == 2) {
         cout << "Kernel: Array-based row-wise SpGEMM (HSMU-SpGEMM inspired, optimized version)" << endl;
+    } else if (kernel_flag == 3) {
+        cout << "Kernel: SPA-based array row-wise SpGEMM (HSMU-SpGEMM inspired, Sparse Accumulator)" << endl;
     } else {
         cout << "Kernel: Unknown kernel flag, defaulting to Hash-based row-wise" << endl;
     }
@@ -118,6 +120,8 @@ void test_spgemm_correctness(const char *matA_path, const char *matB_path, int k
         suffix_str = "hashrowwise";
     } else if (kernel_flag == 2) {
         suffix_str = "arrayrowwise";
+    } else if (kernel_flag == 3) {
+        suffix_str = "sparowwise";
     } else {
         suffix_str = "hashrowwise";  // default
     }
@@ -197,6 +201,8 @@ void test_spgemm_performance(const char *matA_path, const char *matB_path, int i
         cout << "Kernel: Hash-based row-wise SpGEMM (OpenMP with load balancing)" << endl;
     } else if (kernel_flag == 2) {
         cout << "Kernel: Array-based row-wise SpGEMM (HSMU-SpGEMM inspired, optimized version)" << endl;
+    } else if (kernel_flag == 3) {
+        cout << "Kernel: SPA-based array row-wise SpGEMM (HSMU-SpGEMM inspired, Sparse Accumulator)" << endl;
     } else {
         cout << "Kernel: Unknown kernel flag, defaulting to Hash-based row-wise" << endl;
     }
@@ -300,8 +306,8 @@ void run_spgemm_test(int argc, char **argv)
     char *kernel_str = get_argval(argc, argv, "kernel");
     if(kernel_str != NULL) {
         kernel_flag = atoi(kernel_str);
-        if(kernel_flag != 1 && kernel_flag != 2) {
-            printf("Error: kernel must be 1 (Hash-based row-wise) or 2 (Array-based row-wise optimized) (for cluster-wise methods, use test_spgemm_flength)\n");
+        if(kernel_flag != 1 && kernel_flag != 2 && kernel_flag != 3) {
+            printf("Error: kernel must be 1 (Hash-based row-wise), 2 (Array-based row-wise optimized), or 3 (SPA-based array row-wise) (for cluster-wise methods, use test_spgemm_flength)\n");
             return;
         }
     }
@@ -323,6 +329,8 @@ void run_spgemm_test(int argc, char **argv)
         cout << " (Hash-based row-wise)" << endl;
     } else if (kernel_flag == 2) {
         cout << " (Array-based row-wise, optimized version)" << endl;
+    } else if (kernel_flag == 3) {
+        cout << " (SPA-based array row-wise)" << endl;
     } else {
         cout << " (Unknown, defaulting to Hash-based row-wise)" << endl;
     }

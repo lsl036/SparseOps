@@ -401,6 +401,91 @@ void spgemm_array_numeric_new(
     }
 }
 
+/**
+ * @brief SPA-based numeric phase: use dense accumulator for O(1) access
+ *        This is the optimized version using Sparse Accumulator (SPA)
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+void spgemm_spa_numeric(
+    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
+    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
+    IndexType c_rows, IndexType c_cols,
+    const IndexType *cpt, const IndexType *ccol, ValueType *cval,
+    SpGEMM_BIN<IndexType, ValueType> *bin)
+{
+    // Numeric phase: compute values using SPA (Sparse Accumulator)
+    // Memory optimization: Only allocate SPA if c_cols is reasonable
+    // For very wide matrices (c_cols > threshold), fall back to binary search method
+    // Threshold: 1M columns (adjustable based on available memory)
+    const IndexType SPA_THRESHOLD = 1024 * 1024; // 1M columns
+    
+    if (c_cols > SPA_THRESHOLD) {
+        // Fall back to binary search method for very wide matrices
+        // This avoids excessive memory allocation
+        spgemm_array_numeric_new<sortOutput, IndexType, ValueType>(
+            arpt, acol, aval, brpt, bcol, bval,
+            c_rows, c_cols, cpt, ccol, cval, bin);
+        return;
+    }
+    
+    // Use SPA method for matrices with reasonable column count
+    #pragma omp parallel num_threads(bin->allocated_thread_num)
+    {
+        int tid = Le_get_thread_id();
+        IndexType start_row = bin->rows_offset[tid];
+        IndexType end_row = bin->rows_offset[tid + 1];
+        
+        // Allocate SPA (Sparse Accumulator) - dense array per thread
+        // Note: We still allocate c_cols size, but only clear/use columns from ccol
+        // This maintains O(1) access advantage while minimizing initialization cost
+        ValueType *spa_val = new_array<ValueType>(c_cols);
+        
+        for (IndexType i = start_row; i < end_row; ++i) {
+            IndexType row_start = cpt[i];
+            IndexType row_nnz = cpt[i + 1] - row_start;
+            if (row_nnz == 0) continue;
+            
+            // Get pointer to this row's sorted column indices
+            const IndexType *row_ccol = ccol + row_start;
+            
+            // Step 1: Clear only the columns that will be used in this row
+            // Optimization: We know from symbolic phase which columns will have values
+            // Only clear those columns, not the entire SPA array
+            // for (IndexType j = 0; j < row_nnz; ++j) {
+            //     IndexType col_idx = row_ccol[j];
+            //     spa_val[col_idx] = 0;
+            // }
+            
+            // Step 2: Accumulate intermediate products using O(1) direct access
+            // No binary search needed - direct array indexing!
+            // Note: bcol[k] values should be within [0, c_cols), and should match ccol entries
+            // (symbolic phase ensures consistency)
+            for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
+                IndexType t_acol = acol[j];
+                ValueType t_aval = aval[j];
+                
+                for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
+                    IndexType col_idx = bcol[k];
+                    // Direct O(1) access - no lookup overhead!
+                    // col_idx is guaranteed to be in ccol (from symbolic phase)
+                    spa_val[col_idx] += t_aval * bval[k];
+                }
+            }
+            
+            // Step 3: Collect results from SPA using pre-sorted ccol
+            // This is efficient because ccol is already sorted from symbolic phase
+            for (IndexType j = 0; j < row_nnz; ++j) {
+                IndexType col_idx = row_ccol[j];
+                cval[row_start + j] = spa_val[col_idx];
+                // Clear for next row (already done in Step 1, but ensures clean state)
+                spa_val[col_idx] = 0;
+            }
+        }
+        
+        delete_array(spa_val);
+    }
+}
+
 // ============================================================================
 // Explicit Template Instantiations
 // ============================================================================
@@ -439,6 +524,28 @@ template void spgemm_array_numeric_new<true, int64_t, float>(
     int64_t, int64_t, const int64_t*, const int64_t*, float*,
     SpGEMM_BIN<int64_t, float>*);
 template void spgemm_array_numeric_new<true, int64_t, double>(
+    const int64_t*, const int64_t*, const double*,
+    const int64_t*, const int64_t*, const double*,
+    int64_t, int64_t, const int64_t*, const int64_t*, double*,
+    SpGEMM_BIN<int64_t, double>*);
+
+// Template instantiations for SPA-based numeric phase
+template void spgemm_spa_numeric<false, int64_t, float>(
+    const int64_t*, const int64_t*, const float*,
+    const int64_t*, const int64_t*, const float*,
+    int64_t, int64_t, const int64_t*, const int64_t*, float*,
+    SpGEMM_BIN<int64_t, float>*);
+template void spgemm_spa_numeric<false, int64_t, double>(
+    const int64_t*, const int64_t*, const double*,
+    const int64_t*, const int64_t*, const double*,
+    int64_t, int64_t, const int64_t*, const int64_t*, double*,
+    SpGEMM_BIN<int64_t, double>*);
+template void spgemm_spa_numeric<true, int64_t, float>(
+    const int64_t*, const int64_t*, const float*,
+    const int64_t*, const int64_t*, const float*,
+    int64_t, int64_t, const int64_t*, const int64_t*, float*,
+    SpGEMM_BIN<int64_t, float>*);
+template void spgemm_spa_numeric<true, int64_t, double>(
     const int64_t*, const int64_t*, const double*,
     const int64_t*, const int64_t*, const double*,
     int64_t, int64_t, const int64_t*, const int64_t*, double*,

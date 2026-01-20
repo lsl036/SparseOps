@@ -68,6 +68,36 @@ void spgemm_array_numeric_new(
     SpGEMM_BIN<IndexType, ValueType> *bin);
 
 /**
+ * @brief SPA-based numeric phase: use dense accumulator for O(1) access (HSMU-SpGEMM inspired)
+ *        Uses Sparse Accumulator (SPA) - a dense array of size c_cols per thread
+ *        This eliminates the need for binary search, achieving O(1) access instead of O(log n)
+ * 
+ * Key optimization:
+ * - Each thread maintains a dense accumulator array (SPA) of size c_cols
+ * - Direct O(1) access via column index: spa_val[bcol[k]] += product
+ * - No binary search needed, eliminating lookup overhead
+ * - Better cache locality for dense accumulation
+ * - Only clear columns that are actually used (from ccol)
+ * 
+ * Memory trade-off:
+ * - Memory: O(c_cols) per thread (can be large for wide matrices)
+ * - Performance: O(1) access vs O(log n) binary search
+ * - Optimization: Automatically falls back to binary search method if c_cols > 1M
+ *   to avoid excessive memory allocation for very wide matrices
+ * 
+ * @tparam sortOutput Ignored (ccol is already sorted from symbolic phase)
+ * @param ccol Pre-sorted column index array (from spgemm_array_symbolic_new)
+ * @param cval Values array (will be filled from SPA)
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+void spgemm_spa_numeric(
+    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
+    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
+    IndexType c_rows, IndexType c_cols,
+    const IndexType *cpt, const IndexType *ccol, ValueType *cval,
+    SpGEMM_BIN<IndexType, ValueType> *bin);
+
+/**
  * @brief Helper: Binary search to find position for insertion in sorted array
  * @return Position index, or -1 if key already exists (for numeric phase)
  */
