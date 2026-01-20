@@ -16,6 +16,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
+#include <fstream>
+#include <limits>
+#include <string>
 
 // 宏，用于传递当前的函数名、文件名和行号
 #define CHECK_ALLOC(ptr) checkAlloc((ptr), __FUNCTION__, __FILE__, __LINE__)
@@ -1616,6 +1619,198 @@ CSR_Matrix<IndexType, ValueType> flength_cluster2csr(const CSR_FlengthCluster<In
     delete_array(work);
     
     return csr;
+}
+
+/**
+ * @brief Reorder rows of a CSR matrix according to a row permutation mapping
+ *        Reference implementation approach: directly rebuild CSR matrix following permutation order
+ *        Follows ReorderedRowSpGEMM.cpp logic: iterate shuffled_rows, use col_map to get new row index
+ *        row_permutation[i] = original row index that should be placed at new row i (shuffled_rows[i])
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param csr Input CSR matrix (will not be modified)
+ * @param row_permutation Permutation array: row_permutation[i] = original row index that should be placed at new row i
+ *                        Length must be >= csr.num_rows
+ *                        Example: if row_permutation[0] = 5, then original row 5 will be placed at new row 0
+ * @return CSR_Matrix<IndexType, ValueType> Reordered CSR matrix
+ */
+template <typename IndexType, typename ValueType>
+CSR_Matrix<IndexType, ValueType> csr_reorder_rows(
+    const CSR_Matrix<IndexType, ValueType> &csr,
+    const IndexType *row_permutation)
+{
+    CSR_Matrix<IndexType, ValueType> reordered_csr;
+    
+    // Output matrix has same dimensions
+    reordered_csr.num_rows = csr.num_rows;
+    reordered_csr.num_cols = csr.num_cols;
+    reordered_csr.tag = 0;
+    reordered_csr.kernel_flag = 0;
+    reordered_csr.partition = nullptr;
+    
+    if (csr.num_nnzs == 0) {
+        // Empty matrix case
+        reordered_csr.num_nnzs = 0;
+        reordered_csr.row_offset = new_array<IndexType>(reordered_csr.num_rows + 1);
+        CHECK_ALLOC(reordered_csr.row_offset);
+        std::fill_n(reordered_csr.row_offset, reordered_csr.num_rows + 1, static_cast<IndexType>(0));
+        reordered_csr.col_index = nullptr;
+        reordered_csr.values = nullptr;
+        return reordered_csr;
+    }
+    
+    // Reference implementation approach: build col_map (original_row -> new_row)
+    // shuffled_rows[i] = original row index
+    // col_map[shuffled_rows[i]] = i (new row index)
+    std::unordered_map<IndexType, IndexType> col_map;
+    for (IndexType new_row = 0; new_row < csr.num_rows; ++new_row) {
+        IndexType original_row = row_permutation[new_row];
+        if (original_row >= 0 && original_row < csr.num_rows) {
+            col_map[original_row] = new_row;
+        }
+    }
+    
+    // Count total nnz: iterate through shuffled_rows (row_permutation) and count nnz
+    IndexType total_nnz = 0;
+    for (IndexType i = 0; i < csr.num_rows; ++i) {
+        IndexType original_row = row_permutation[i];
+        if (original_row >= 0 && original_row < csr.num_rows) {
+            IndexType row_nnz = csr.row_offset[original_row + 1] - csr.row_offset[original_row];
+            total_nnz += row_nnz;
+        }
+    }
+    
+    reordered_csr.num_nnzs = total_nnz;
+    
+    // Allocate output CSR arrays
+    reordered_csr.row_offset = new_array<IndexType>(reordered_csr.num_rows + 1);
+    CHECK_ALLOC(reordered_csr.row_offset);
+    reordered_csr.col_index = new_array<IndexType>(reordered_csr.num_nnzs);
+    CHECK_ALLOC(reordered_csr.col_index);
+    reordered_csr.values = new_array<ValueType>(reordered_csr.num_nnzs);
+    CHECK_ALLOC(reordered_csr.values);
+    
+    // Build reordered matrix: iterate shuffled_rows (row_permutation), use col_map to get new row index
+    // Reference: for (auto t: shuffled_rows) { ... triples[triplet_id] = Triple(col_map[t], ...) }
+    IndexType triplet_id = 0;
+    IndexType row_id = 0;
+    
+    // First pass: compute row_offset (prefix sum of nnz per row)
+    IndexType cumsum = 0;
+    reordered_csr.row_offset[0] = 0;
+    for (IndexType i = 0; i < csr.num_rows; ++i) {
+        IndexType original_row = row_permutation[i];
+        IndexType row_nnz = 0;
+        if (original_row >= 0 && original_row < csr.num_rows) {
+            row_nnz = csr.row_offset[original_row + 1] - csr.row_offset[original_row];
+        }
+        cumsum += row_nnz;
+        reordered_csr.row_offset[i + 1] = cumsum;
+    }
+    
+    // Second pass: copy data (like reference: iterate shuffled_rows, use col_map[t] as new row index)
+    for (IndexType i = 0; i < csr.num_rows; ++i) {
+        IndexType original_row = row_permutation[i];  // t = shuffled_rows[i]
+        if (original_row >= 0 && original_row < csr.num_rows) {
+            IndexType new_row = col_map[original_row];  // col_map[t]
+            
+            IndexType src_start = csr.row_offset[original_row];
+            IndexType src_end = csr.row_offset[original_row + 1];
+            IndexType row_nnz = src_end - src_start;
+            
+            if (row_nnz > 0) {
+                IndexType dst_start = reordered_csr.row_offset[new_row];
+                
+                // Copy columns and values from original row to new row
+                for (IndexType j = 0; j < row_nnz; ++j) {
+                    reordered_csr.col_index[dst_start + j] = csr.col_index[src_start + j];
+                    reordered_csr.values[dst_start + j] = csr.values[src_start + j];
+                }
+            }
+        }
+        row_id += 1;
+    }
+    
+    return reordered_csr;
+}
+
+/**
+ * @brief Reorder rows of a CSR matrix using a vector permutation
+ *        Convenience wrapper for csr_reorder_rows with vector input
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param csr Input CSR matrix (will not be modified)
+ * @param row_permutation Vector: row_permutation[i] = original row index that should be placed at new row i
+ * @return CSR_Matrix<IndexType, ValueType> Reordered CSR matrix
+ */
+template <typename IndexType, typename ValueType>
+CSR_Matrix<IndexType, ValueType> csr_reorder_rows(
+    const CSR_Matrix<IndexType, ValueType> &csr,
+    const std::vector<IndexType> &row_permutation)
+{
+    if (row_permutation.size() < static_cast<size_t>(csr.num_rows)) {
+        std::cerr << "Error: row_permutation size (" << row_permutation.size() 
+                  << ") < matrix rows (" << csr.num_rows << ")" << std::endl;
+        throw std::invalid_argument("row_permutation size must be >= matrix rows");
+    }
+    return csr_reorder_rows(csr, row_permutation.data());
+}
+
+/**
+ * @brief Read row permutation from a text file
+ *        Matches ReorderedRowSpGEMM.cpp: 0-based, no -1; MTX header/size line skipped; else plain from start.
+ *        vector[i] = original row index for new row i (shuffled_rows[i]).
+ *
+ * @tparam IndexType
+ * @param filename  Path to permutation file (shuffle.txt)
+ * @param num_rows  Expected rows (for padding/truncate). 0 = no size adjustment.
+ * @return std::vector<IndexType>  Permutation (shuffled_rows)
+ */
+template <typename IndexType>
+std::vector<IndexType> read_row_permutation(const char *filename, IndexType num_rows = 0)
+{
+    std::vector<IndexType> shuffled_rows;
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot open permutation file: " << filename << std::endl;
+        throw std::runtime_error("Cannot open permutation file");
+    }
+
+    IndexType tmp;
+    std::string first_line;
+    std::getline(file, first_line);
+
+    if (first_line.find("%%MatrixMarket") != std::string::npos) {
+        // MTX: skip comment lines, then skip size line, then read numbers (0-based, no -1)
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line[0] != '%') break;  // size line, skip (as in ReorderedRowSpGEMM)
+        }
+        while (file >> tmp) {
+            shuffled_rows.push_back(tmp);
+        }
+    } else {
+        // Plain: rewind and read from beginning (0-based, no -1)
+        file.clear();
+        file.seekg(0, std::ios::beg);
+        while (file >> tmp) {
+            shuffled_rows.push_back(tmp);
+        }
+    }
+    file.close();
+
+    // Size adjustment: if num_rows>0 and size<num_rows, pad with (size, size+1, ...) like reference
+    if (num_rows > 0) {
+        if (static_cast<IndexType>(shuffled_rows.size()) < num_rows) {
+            for (IndexType i = static_cast<IndexType>(shuffled_rows.size()); i < num_rows; ++i)
+                shuffled_rows.push_back(i);
+        } else if (static_cast<IndexType>(shuffled_rows.size()) > num_rows) {
+            shuffled_rows.resize(num_rows);
+        }
+    }
+    return shuffled_rows;
 }
 
 #endif /* SPARSE_CONVERSION_H */

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Matrix comparison script for Row-wise SpGEMM results validation.
+Matrix comparison script for Reordered SpGEMM results validation.
 Compares computed results with reference results.
 Supports kernel 1 (hash-based), kernel 2 (optimized array-based), and kernel 3 (SPA-based).
 
 Usage:
-    python3 compare_results_rowwise.py [--kernel=1|2|3|hashrowwise|arrayrowwise|sparowwise]
+    python3 compare_results_reordered.py [--kernel=1|2|3|hashrowwise|arrayrowwise|sparowwise]
     
     --kernel: Select kernel to compare (default: 1)
               1 or hashrowwise: Hash-based row-wise kernel
@@ -18,14 +18,8 @@ import os
 import argparse
 from collections import defaultdict
 
-# Matrix names array for easy extension
-MATRIX_NAMES = [
-    'bcspwr10',
-    'bcsstk32',
-    'skirt_id_764',
-    '2cubes_sphere'
-    # Add more matrix names here in the future
-]
+# Matrix name for reordered SpGEMM test
+MATRIX_NAME = '2cubes_sphere'
 
 # Base directory for matrix files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -200,16 +194,16 @@ def main():
     """Main function to compare matrices."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="Compare Row-wise SpGEMM computed results with reference results",
+        description="Compare Reordered SpGEMM computed results with reference results",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 compare_results_rowwise.py --kernel=1
-  python3 compare_results_rowwise.py --kernel=hashrowwise
-  python3 compare_results_rowwise.py --kernel=2
-  python3 compare_results_rowwise.py --kernel=arrayrowwise
-  python3 compare_results_rowwise.py --kernel=3
-  python3 compare_results_rowwise.py --kernel=sparowwise
+  python3 compare_results_reordered.py --kernel=1
+  python3 compare_results_reordered.py --kernel=hashrowwise
+  python3 compare_results_reordered.py --kernel=2
+  python3 compare_results_reordered.py --kernel=arrayrowwise
+  python3 compare_results_reordered.py --kernel=3
+  python3 compare_results_reordered.py --kernel=sparowwise
         """
     )
     parser.add_argument(
@@ -226,63 +220,55 @@ Examples:
     kernel_display = get_kernel_display_name(kernel_suffix)
     
     print("=" * 60)
-    print("Row-wise SpGEMM Result Validation")
+    print("Reordered SpGEMM Result Validation")
     print("=" * 60)
+    print(f"Matrix: {MATRIX_NAME}")
     print(f"Kernel: {kernel_display} (suffix: {kernel_suffix})")
     print()
     
-    all_passed = True
+    # Construct file paths
+    # Reference file: [name]_ROres.mtx
+    ref_file = os.path.join(SCRIPT_DIR, f"{MATRIX_NAME}_ROres.mtx")
     
-    for matrix_name in MATRIX_NAMES:
-        print(f"\n{'='*60}")
-        print(f"Testing matrix: {matrix_name}")
-        print(f"Kernel: {kernel_display}")
-        print(f"{'='*60}")
-        
-        # Construct file paths
-        ref_file = os.path.join(SCRIPT_DIR, f"{matrix_name}_res.mtx")
-        
-        # Build computed file name with kernel suffix
-        comp_filename = f"{matrix_name}_SpOps_{kernel_suffix}.mtx"
-        
-        # Try multiple possible locations for computed file
-        comp_file = os.path.join(SCRIPT_DIR, comp_filename)
-        if not os.path.exists(comp_file):
-            comp_file = os.path.join(BASE_DIR, "build", comp_filename)
-        
-        # Check if files exist
-        if not os.path.exists(ref_file):
-            print(f"ERROR: Reference file not found: {ref_file}")
-            all_passed = False
-            continue
-        
-        if not os.path.exists(comp_file):
-            print(f"ERROR: Computed file not found: {comp_filename}")
-            print(f"       Searched in:")
-            print(f"         - {os.path.join(SCRIPT_DIR, comp_filename)}")
-            print(f"         - {os.path.join(BASE_DIR, 'build', comp_filename)}")
-            print(f"       Please run test_spgemm with --kernel={args.kernel} first to generate the result.")
-            all_passed = False
-            continue
-        
-        # Compare matrices
-        is_match, message = compare_matrices(ref_file, comp_file)
-        
-        if is_match:
-            print(f"[PASSED] {matrix_name} ({kernel_display})")
-            print(f"  {message}")
-        else:
-            print(f"[FAILED] {matrix_name} ({kernel_display})")
-            print(f"  {message}")
-            all_passed = False
+    # Computed file: [name]_SpOps_reordered_[kernel_suffix].mtx
+    comp_filename = f"{MATRIX_NAME}_SpOps_reordered_{kernel_suffix}.mtx"
+    
+    # Try multiple possible locations for computed file
+    comp_file = os.path.join(SCRIPT_DIR, comp_filename)
+    if not os.path.exists(comp_file):
+        comp_file = os.path.join(BASE_DIR, "build", comp_filename)
+    
+    # Check if files exist
+    if not os.path.exists(ref_file):
+        print(f"ERROR: Reference file not found: {ref_file}")
+        print(f"       Please ensure the reference file exists.")
+        return 1
+    
+    if not os.path.exists(comp_file):
+        print(f"ERROR: Computed file not found: {comp_filename}")
+        print(f"       Searched in:")
+        print(f"         - {os.path.join(SCRIPT_DIR, comp_filename)}")
+        print(f"         - {os.path.join(BASE_DIR, 'build', comp_filename)}")
+        print(f"       Please run test_reordered_spgemm with --kernel={args.kernel} first to generate the result.")
+        return 1
+    
+    # Compare matrices
+    print(f"\n{'='*60}")
+    print(f"Testing matrix: {MATRIX_NAME}")
+    print(f"Kernel: {kernel_display}")
+    print(f"{'='*60}")
+    
+    is_match, message = compare_matrices(ref_file, comp_file)
     
     print()
     print("=" * 60)
-    if all_passed:
-        print(f"All tests PASSED for {kernel_display} kernel!")
+    if is_match:
+        print(f"[PASSED] {MATRIX_NAME} ({kernel_display})")
+        print(f"  {message}")
         return 0
     else:
-        print(f"Some tests FAILED for {kernel_display} kernel!")
+        print(f"[FAILED] {MATRIX_NAME} ({kernel_display})")
+        print(f"  {message}")
         return 1
 
 
