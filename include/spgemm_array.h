@@ -21,23 +21,6 @@
  */
 
 /**
- * @brief Symbolic phase: compute structure of C = A * B
- *        OpenMP with load balancing using BIN
- *        cpt should be pre-allocated (c_rows + 1 elements)
- *        This function performs scan internally to compute nnz
- * 
- * Note: For array-based method, symbolic phase is similar to hash-based,
- *       but we can use a simpler approach (set or sorted array) to count unique columns.
- */
-template <typename IndexType, typename ValueType>
-void spgemm_array_symbolic_omp_lb(
-    const IndexType *arpt, const IndexType *acol,
-    const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols,
-    IndexType *cpt, IndexType &c_nnz,
-    SpGEMM_BIN<IndexType, ValueType> *bin);
-
-/**
  * @brief Optimized symbolic phase: generate and sort Ccol (HSMU-SpGEMM inspired)
  *        OpenMP with load balancing using BIN
  *        This version generates and sorts column indices in symbolic phase,
@@ -58,26 +41,6 @@ void spgemm_array_symbolic_new(
     const IndexType *brpt, const IndexType *bcol,
     IndexType c_rows, IndexType c_cols,
     IndexType *cpt, IndexType *&ccol, IndexType &c_nnz,
-    SpGEMM_BIN<IndexType, ValueType> *bin);
-
-/**
- * @brief Numeric phase: compute values of C = A * B using sorted arrays
- *        OpenMP with load balancing using BIN
- * 
- * Implementation details:
- * - Each row uses a sorted array of size row_nz[i] (exact size, no padding)
- * - Binary search for O(log n) lookup/insert
- * - Array is kept sorted during accumulation
- * - Direct output (already sorted, no extra sort step needed)
- * 
- * @tparam sortOutput If true, ensures output is sorted (already sorted by default)
- */
-template <bool sortOutput, typename IndexType, typename ValueType>
-void spgemm_array_numeric_omp_lb(
-    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
-    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols,
-    const IndexType *cpt, IndexType *ccol, ValueType *cval,
     SpGEMM_BIN<IndexType, ValueType> *bin);
 
 /**

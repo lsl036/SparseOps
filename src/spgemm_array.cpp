@@ -232,70 +232,6 @@ bool insert_or_accumulate(IndexType *arr_col, ValueType *arr_val,
 // Symbolic Phase Implementations
 // ============================================================================
 
-template <typename IndexType, typename ValueType>
-void spgemm_array_symbolic_omp_lb(
-    const IndexType *arpt, const IndexType *acol,
-    const IndexType *brpt, const IndexType *bcol,
-    IndexType c_rows, IndexType c_cols,
-    IndexType *cpt, IndexType &c_nnz,
-    SpGEMM_BIN<IndexType, ValueType> *bin)
-{
-    // Symbolic phase: count unique columns per row using sorted arrays
-    // Note: We don't use bin_id here, only row_nz and rows_offset
-    
-    // int thread_num = Le_get_thread_num();
-    
-    // Allocate temporary arrays for each thread
-    // Each thread needs a buffer to store unique columns for one row at a time
-    // We'll use a vector that can grow, but try to estimate max size
-    
-    #pragma omp parallel num_threads(bin->allocated_thread_num)
-    {
-        int tid = Le_get_thread_id();
-        IndexType start_row = bin->rows_offset[tid];
-        IndexType end_row = bin->rows_offset[tid + 1];
-        
-        // Temporary buffer for storing unique columns (per row)
-        // Use estimated max size from row_nz (from set_max_bin)
-        IndexType max_nz = 0;
-        for (IndexType i = start_row; i < end_row; ++i) {
-            if (bin->row_nz[i] > max_nz) {
-                max_nz = bin->row_nz[i];
-            }
-        }
-        
-        // Cap at c_cols
-        if (max_nz > c_cols) max_nz = c_cols;
-        
-        // Allocate temporary array for unique columns
-        IndexType *temp_cols = new_array<IndexType>(max_nz);
-        
-        for (IndexType i = start_row; i < end_row; ++i) {
-            IndexType nz = 0;
-            IndexType temp_size = 0;
-            
-            // Collect unique columns for this row
-            for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
-                IndexType t_acol = acol[j];
-                for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                    IndexType key = bcol[k];
-                    if (insert_if_not_exists(temp_cols, temp_size, max_nz, key)) {
-                        nz++;
-                    }
-                }
-            }
-            
-            bin->row_nz[i] = nz;
-        }
-        
-        delete_array(temp_cols);
-    }
-    
-    // Set row pointer of matrix C using scan
-    scan(bin->row_nz, cpt, c_rows + 1, bin->allocated_thread_num);
-    c_nnz = cpt[c_rows];
-}
-
 /**
  * @brief Optimized symbolic phase: generate and sort Ccol (HSMU-SpGEMM inspired)
  *        This version generates and sorts column indices during symbolic phase,
@@ -399,76 +335,6 @@ void spgemm_array_symbolic_new(
 // Numeric Phase Implementations
 // ============================================================================
 
-template <bool sortOutput, typename IndexType, typename ValueType>
-void spgemm_array_numeric_omp_lb(
-    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
-    const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
-    IndexType c_rows, IndexType c_cols,
-    const IndexType *cpt, IndexType *ccol, ValueType *cval,
-    SpGEMM_BIN<IndexType, ValueType> *bin)
-{
-    // Numeric phase: compute values using sorted arrays
-    // Note: We don't use bin_id here, only row_nz and rows_offset
-    // Array size for each row = row_nz[i] (exact size, no padding)
-    
-    // int thread_num = Le_get_thread_num();
-    
-    #pragma omp parallel num_threads(bin->allocated_thread_num)
-    {
-        int tid = Le_get_thread_id();
-        IndexType start_row = bin->rows_offset[tid];
-        IndexType end_row = bin->rows_offset[tid + 1];
-        
-        // Find max array size needed for this thread's rows
-        IndexType max_array_size = 0;
-        for (IndexType i = start_row; i < end_row; ++i) {
-            IndexType nz = bin->row_nz[i];
-            if (nz > max_array_size) {
-                max_array_size = nz;
-            }
-        }
-        
-        // Allocate temporary arrays for accumulation (reused for each row)
-        IndexType *temp_cols = new_array<IndexType>(max_array_size);
-        ValueType *temp_vals = new_array<ValueType>(max_array_size);
-        
-        for (IndexType i = start_row; i < end_row; ++i) {
-            IndexType nz = bin->row_nz[i];
-            if (nz == 0) continue;
-            
-            IndexType offset = cpt[i];
-            IndexType array_size = 0;
-            
-            // Clear arrays (not needed, but for safety)
-            // We'll reset array_size to 0 for each row
-            
-            // Accumulate intermediate products
-            for (IndexType j = arpt[i]; j < arpt[i + 1]; ++j) {
-                IndexType t_acol = acol[j];
-                ValueType t_aval = aval[j];
-                
-                for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                    ValueType t_val = t_aval * bval[k];
-                    IndexType key = bcol[k];
-                    
-                    // Insert or accumulate in sorted array
-                    insert_or_accumulate(temp_cols, temp_vals, array_size, nz, key, t_val);
-                }
-            }
-            
-            // Copy sorted array directly to output (already sorted, no extra sort needed)
-            // Note: sortOutput is ignored since array is already sorted
-            for (IndexType j = 0; j < array_size; ++j) {
-                ccol[offset + j] = temp_cols[j];
-                cval[offset + j] = temp_vals[j];
-            }
-        }
-        
-        delete_array(temp_cols);
-        delete_array(temp_vals);
-    }
-}
-
 /**
  * @brief Optimized numeric phase: find position and accumulate (HSMU-SpGEMM inspired)
  *        Uses pre-sorted Ccol from symbolic phase, eliminating insertion operations
@@ -548,14 +414,6 @@ template bool insert_if_not_exists<int64_t>(int64_t*, int64_t&, int64_t, int64_t
 template bool insert_or_accumulate<int64_t, float>(int64_t*, float*, int64_t&, int64_t, int64_t, float);
 template bool insert_or_accumulate<int64_t, double>(int64_t*, double*, int64_t&, int64_t, int64_t, double);
 
-// Symbolic phase
-template void spgemm_array_symbolic_omp_lb<int64_t, float>(
-    const int64_t*, const int64_t*, const int64_t*, const int64_t*,
-    int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN<int64_t, float>*);
-template void spgemm_array_symbolic_omp_lb<int64_t, double>(
-    const int64_t*, const int64_t*, const int64_t*, const int64_t*,
-    int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN<int64_t, double>*);
-
 // Template instantiations for optimized symbolic phase
 template void spgemm_array_symbolic_new<int64_t, float>(
     const int64_t*, const int64_t*, const int64_t*, const int64_t*,
@@ -588,26 +446,4 @@ template void spgemm_array_numeric_new<true, int64_t, double>(
 
 // Helper function instantiations
 template int64_t binary_search_find<int64_t>(const int64_t*, int64_t, int64_t);
-
-// Numeric phase
-template void spgemm_array_numeric_omp_lb<false, int64_t, float>(
-    const int64_t*, const int64_t*, const float*, 
-    const int64_t*, const int64_t*, const float*, 
-    int64_t, int64_t, const int64_t*, int64_t*, float*, 
-    SpGEMM_BIN<int64_t, float>*);
-template void spgemm_array_numeric_omp_lb<false, int64_t, double>(
-    const int64_t*, const int64_t*, const double*, 
-    const int64_t*, const int64_t*, const double*, 
-    int64_t, int64_t, const int64_t*, int64_t*, double*, 
-    SpGEMM_BIN<int64_t, double>*);
-template void spgemm_array_numeric_omp_lb<true, int64_t, float>(
-    const int64_t*, const int64_t*, const float*, 
-    const int64_t*, const int64_t*, const float*, 
-    int64_t, int64_t, const int64_t*, int64_t*, float*, 
-    SpGEMM_BIN<int64_t, float>*);
-template void spgemm_array_numeric_omp_lb<true, int64_t, double>(
-    const int64_t*, const int64_t*, const double*, 
-    const int64_t*, const int64_t*, const double*, 
-    int64_t, int64_t, const int64_t*, int64_t*, double*, 
-    SpGEMM_BIN<int64_t, double>*);
 

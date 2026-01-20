@@ -4,12 +4,11 @@ Row-wise SpGEMM test script.
 Runs test_spgemm on multiple datasets with specified kernel.
 
 Usage:
-    python3 run_rowwise_spgemm.py [--kernel=1|2|3] [--test_type=correctness|performance] [--iterations=N]
+    python3 run_rowwise_spgemm.py [--kernel=1|2] [--test_type=correctness|performance] [--iterations=N]
     
     --kernel: Select kernel to test (default: 1)
               1: Hash-based row-wise SpGEMM
-              2: Array-based row-wise SpGEMM (original)
-              3: Optimized array-based row-wise SpGEMM
+              2: Optimized array-based row-wise SpGEMM
     
     --test_type: Select test type (default: correctness)
                  correctness: Test correctness and save results
@@ -38,8 +37,7 @@ DATASETS = [
 # Kernel names for display
 KERNEL_NAMES = {
     1: "Hash-based row-wise",
-    2: "Array-based row-wise (original)",
-    3: "Optimized array-based row-wise"
+    2: "Optimized array-based row-wise"
 }
 
 
@@ -52,7 +50,7 @@ def parse_arguments():
 Examples:
   python3 run_rowwise_spgemm.py --kernel=1
   python3 run_rowwise_spgemm.py --kernel=2 --test_type=performance
-  python3 run_rowwise_spgemm.py --kernel=3 --test_type=correctness
+  python3 run_rowwise_spgemm.py --kernel=2 --test_type=correctness
   python3 run_rowwise_spgemm.py --kernel=1 --iterations=20
         """
     )
@@ -60,9 +58,9 @@ Examples:
     parser.add_argument(
         "--kernel",
         type=int,
-        choices=[1, 2, 3],
+        choices=[1, 2],
         default=1,
-        help="Kernel to test: 1 (Hash-based), 2 (Array-based original), 3 (Array-based optimized, default: 1)"
+        help="Kernel to test: 1 (Hash-based), 2 (Array-based optimized, default: 1)"
     )
     
     parser.add_argument(

@@ -50,11 +50,11 @@ Then you will get some test routines of different SpMV algorithms. If some compi
 
 Finished make all stuffs:
 ``` 
-python3 run_rowwise_spgemm.py --kernel=1 (1, 2 or 3 for different row-wise kernels)
+python3 run_rowwise_spgemm.py --kernel=1 (1, 2 for different row-wise kernels)
 ```
 Then the C matrix will be writte，then you can run (the correct results should be stored in `script/`):
 ```
-python3 ../script/compare_results_rowwise.py --kernel=1 (1, 2 or 3 corresponding above)
+python3 ../script/compare_results_rowwise.py --kernel=1 (1, 2 corresponding above)
 ```
 
 - Fixed-lengrh Cluster SpGEMM kernels:

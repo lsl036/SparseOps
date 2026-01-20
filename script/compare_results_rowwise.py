@@ -2,15 +2,14 @@
 """
 Matrix comparison script for Row-wise SpGEMM results validation.
 Compares computed results with reference results.
-Supports kernel 1 (hash-based), kernel 2 (array-based), and kernel 3 (optimized array-based).
+Supports kernel 1 (hash-based), and kernel 2 (optimized array-based).
 
 Usage:
-    python3 compare_results_rowwise.py [--kernel=1|2|3|hashrowwise|arrayrowwise|arrayrowwise_opt]
+    python3 compare_results_rowwise.py [--kernel=1|2|hashrowwise|arrayrowwise]
     
     --kernel: Select kernel to compare (default: 1)
               1 or hashrowwise: Hash-based row-wise kernel
-              2 or arrayrowwise: Array-based row-wise kernel (original)
-              3 or arrayrowwise_opt: Optimized array-based row-wise kernel
+              2 or arrayrowwise: Optimized array-based row-wise kernel
 """
 
 import sys
@@ -150,15 +149,11 @@ def parse_kernel_arg(kernel_arg):
         return "hashrowwise"
     elif kernel_arg == "2":
         return "arrayrowwise"
-    elif kernel_arg == "3":
-        return "arrayrowwise_opt"
     # Support string values
     elif kernel_arg == "hashrowwise" or kernel_arg == "hash":
         return "hashrowwise"
     elif kernel_arg == "arrayrowwise" or kernel_arg == "array":
         return "arrayrowwise"
-    elif kernel_arg == "arrayrowwise_opt" or kernel_arg == "array_opt":
-        return "arrayrowwise_opt"
     else:
         print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashrowwise")
         return "hashrowwise"
@@ -169,8 +164,6 @@ def get_kernel_display_name(suffix):
     if suffix == "hashrowwise":
         return "Hash-based row-wise"
     elif suffix == "arrayrowwise":
-        return "Array-based row-wise (original)"
-    elif suffix == "arrayrowwise_opt":
         return "Optimized array-based row-wise"
     else:
         return f"Unknown ({suffix})"
@@ -188,8 +181,6 @@ Examples:
   python3 compare_results_rowwise.py --kernel=hashrowwise
   python3 compare_results_rowwise.py --kernel=2
   python3 compare_results_rowwise.py --kernel=arrayrowwise
-  python3 compare_results_rowwise.py --kernel=3
-  python3 compare_results_rowwise.py --kernel=arrayrowwise_opt
         """
     )
     parser.add_argument(
@@ -197,8 +188,7 @@ Examples:
         type=str,
         default="1",
         help="Kernel to compare: 1 or hashrowwise (Hash-based row-wise, default), "
-             "2 or arrayrowwise (Array-based row-wise), "
-             "3 or arrayrowwise_opt (Optimized array-based row-wise)"
+             "2 or arrayrowwise (Optimized array-based row-wise)"
     )
     
     args = parser.parse_args()
