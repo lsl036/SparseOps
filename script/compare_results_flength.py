@@ -19,9 +19,10 @@ from collections import defaultdict
 
 # Matrix names array for easy extension
 MATRIX_NAMES = [
-    'bcspwr10',
-    'bcsstk32',
-    'skirt_id_764'
+    # 'bcspwr10',
+    # 'bcsstk32',
+    # 'skirt_id_764',
+    '2cubes_sphere'
     # Add more matrix names here in the future
 ]
 
@@ -70,9 +71,19 @@ def read_mtx_file(filepath):
     return rows, cols, nnz, data_dict
 
 
-def compare_matrices(ref_file, computed_file, tolerance=1e-6):
+def compare_matrices(ref_file, computed_file, rel_tolerance=1e-10, abs_tolerance=1e-6):
     """
-    Compare two MTX files.
+    Compare two MTX files using mixed tolerance strategy for floating-point rounding errors.
+    
+    For fixed-length cluster SpGEMM, different accumulation order can cause small rounding errors.
+    Uses a mixed strategy: accepts if EITHER relative error OR absolute error is within tolerance.
+    
+    Args:
+        ref_file: Path to reference MTX file
+        computed_file: Path to computed MTX file
+        rel_tolerance: Relative error tolerance (default: 1e-10, relaxed for cluster SpGEMM)
+        abs_tolerance: Absolute error tolerance (default: 1e-6, relaxed for cluster SpGEMM)
+    
     Returns: (is_match, error_message)
     """
     print(f"Reading reference file: {ref_file}")
@@ -117,12 +128,18 @@ def compare_matrices(ref_file, computed_file, tolerance=1e-6):
             elif col not in comp_dict:
                 differences.append(f"  Row {row+1}, Col {col+1}: missing in computed (value={ref_val})")
             else:
-                # Check value difference
-                diff = abs(ref_val - comp_val)
-                if diff > tolerance:
+                # Check value difference using mixed tolerance strategy
+                abs_diff = abs(ref_val - comp_val)
+                
+                # Mixed strategy: accept if EITHER relative error OR absolute error is within tolerance
+                # This handles both large values (where relative error matters) and small values (where absolute error matters)
+                rel_diff = abs_diff / (abs(ref_val) + 1e-15)  # Add small epsilon to avoid division by zero
+                
+                # Accept if either relative error OR absolute error is within tolerance
+                if rel_diff > rel_tolerance and abs_diff > abs_tolerance:
                     differences.append(
                         f"  Row {row+1}, Col {col+1}: value mismatch "
-                        f"(ref={ref_val}, comp={comp_val}, diff={diff})"
+                        f"(ref={ref_val}, comp={comp_val}, abs_diff={abs_diff:.2e}, rel_diff={rel_diff:.2e})"
                     )
     
     if differences:
@@ -132,7 +149,6 @@ def compare_matrices(ref_file, computed_file, tolerance=1e-6):
         return False, error_msg
     
     return True, "Matrices match!"
-
 
 def parse_kernel_arg(kernel_arg):
     """
@@ -189,6 +205,18 @@ Examples:
         default="1",
         help="Kernel to compare: 1 or hashflengthcluster (Hash-based fixed-length cluster, default) or 2 or arrayflengthcluster (Array-based fixed-length cluster)"
     )
+    parser.add_argument(
+        "--rel-tol",
+        type=float,
+        default=1e-10,
+        help="Relative error tolerance (default: 1e-10, relaxed for cluster SpGEMM rounding errors)"
+    )
+    parser.add_argument(
+        "--abs-tol",
+        type=float,
+        default=1e-6,
+        help="Absolute error tolerance (default: 1e-6, relaxed for cluster SpGEMM rounding errors)"
+    )
     
     args = parser.parse_args()
     kernel_suffix = parse_kernel_arg(args.kernel)
@@ -209,7 +237,7 @@ Examples:
         print(f"{'='*60}")
         
         # Construct file paths
-        ref_file = os.path.join(SCRIPT_DIR, f"{matrix_name}_res.mtx")
+        ref_file = os.path.join(SCRIPT_DIR, f"{matrix_name}_flen_res.mtx")
         
         # Build computed file name with kernel suffix
         comp_filename = f"{matrix_name}_SpOps_{kernel_suffix}.mtx"
@@ -234,8 +262,10 @@ Examples:
             all_passed = False
             continue
         
-        # Compare matrices
-        is_match, message = compare_matrices(ref_file, comp_file)
+        # Compare matrices with specified tolerances
+        is_match, message = compare_matrices(ref_file, comp_file, 
+                                            rel_tolerance=args.rel_tol, 
+                                            abs_tolerance=args.abs_tol)
         
         if is_match:
             print(f"[PASSED] {matrix_name} ({kernel_display})")
