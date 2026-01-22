@@ -158,5 +158,42 @@ void LeSpGEMM_array_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cl
                             const CSR_Matrix<IndexType, ValueType> &B,
                             CSR_FlengthCluster<IndexType, ValueType> &C_cluster);
 
+/**
+ * @brief Variable-length Cluster-wise SpGEMM implementation
+ *        Supports clusters with variable sizes (cluster_sz[i])
+ *        Reference: hash_mult_vlengthcluster.h::HashSpGEMMVLCluster
+ * 
+ * @tparam sortOutput Whether to sort output columns (template parameter)
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_VlengthCluster format
+ * @param B Input matrix B in CSR_Matrix format
+ * @param C_cluster Output matrix C in CSR_VlengthCluster format (will be allocated)
+ * @param kernel_flag Kernel selection flag (1=hash-based cluster-wise, default; 2=array-based, future)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
+                      const CSR_Matrix<IndexType, ValueType> &B,
+                      CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
+                      int kernel_flag = 1);
+
+/**
+ * @brief Hash-based Variable-length Cluster-wise SpGEMM implementation
+ *        Uses hash tables for accumulation at cluster level (kernel_flag = 1)
+ *        This is a sub-interface called by LeSpGEMM_VLength
+ *        Reference: hash_mult_vlengthcluster.h::HashSpGEMMVLCluster
+ * 
+ * @tparam sortOutput Whether to sort output columns (template parameter)
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A_cluster Input matrix A in CSR_VlengthCluster format
+ * @param B Input matrix B in CSR_Matrix format
+ * @param C_cluster Output matrix C in CSR_VlengthCluster format (will be allocated)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_hash_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
+                           const CSR_Matrix<IndexType, ValueType> &B,
+                           CSR_VlengthCluster<IndexType, ValueType> &C_cluster);
+
 #endif /* SPGEMM_H */
 

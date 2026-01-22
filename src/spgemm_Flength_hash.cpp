@@ -82,14 +82,13 @@ inline void sort_and_store_table2mat_cluster(IndexType *ht_check, ValueType *ht_
 
 template <typename IndexType, typename ValueType>
 void spgemm_Flength_hash_symbolic_omp_lb(
-    const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+    const IndexType *arpt, const IndexType *acol,
     const IndexType *brpt, const IndexType *bcol,
     IndexType c_clusters, IndexType c_cols,
     IndexType *crpt, IndexType &c_nnzc,
     SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin)
 {   
     // Symbolic phase: count unique column IDs per cluster (matching reference hash_symbolic_kernel_cluster)
-    // int thread_num = Le_get_thread_num();
     #pragma omp parallel num_threads(bin->allocated_thread_num)
     {
         int tid = Le_get_thread_id();
@@ -114,13 +113,13 @@ void spgemm_Flength_hash_symbolic_omp_lb(
                 }
                 
                 // Get cluster's column range
-                IndexType col_start = A_cluster.rowptr[cluster_id];
-                IndexType col_end = A_cluster.rowptr[cluster_id + 1];
+                IndexType col_start = arpt[cluster_id];
+                IndexType col_end = arpt[cluster_id + 1];
                 
                 // For each column in this cluster, collect unique column IDs from B
                 // Note: Reference code doesn't check bounds here, assuming valid input
                 for (IndexType j = col_start; j < col_end; ++j) {
-                    t_acol = A_cluster.colids[j];
+                    t_acol = acol[j];
                     // Multiply with B[t_acol, :]
                     for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
                         key = bcol[k];
@@ -157,15 +156,14 @@ void spgemm_Flength_hash_symbolic_omp_lb(
 
 template <bool sortOutput, typename IndexType, typename ValueType>
 void spgemm_Flength_hash_numeric_omp_lb(
-    const CSR_FlengthCluster<IndexType, ValueType> &A_cluster,
+    const IndexType *arpt, const IndexType *acol, const ValueType *aval,
     const IndexType *brpt, const IndexType *bcol, const ValueType *bval,
     IndexType c_clusters, IndexType c_cols,
     const IndexType *crpt, IndexType *ccolids, ValueType *cvalues,
     SpGEMM_BIN_FlengthCluster<IndexType, ValueType> *bin,
-    IndexType cluster_sz, const ValueType eps)
+    IndexType csr_rows, IndexType cluster_sz, const ValueType eps)
 {
     // Numeric phase (matching reference hash_numeric_cluster)
-    // int thread_num = Le_get_thread_num();
     #pragma omp parallel num_threads(bin->allocated_thread_num)
     {
         int tid = Le_get_thread_id();
@@ -191,8 +189,8 @@ void spgemm_Flength_hash_numeric_omp_lb(
                 std::memset(ht_value, 0, ht_size * cluster_sz * sizeof(ValueType));
                 
                 // Get cluster's column range
-                IndexType col_start = A_cluster.rowptr[cluster_id];
-                IndexType col_end = A_cluster.rowptr[cluster_id + 1];
+                IndexType col_start = arpt[cluster_id];
+                IndexType col_end = arpt[cluster_id + 1];
                 
                 // Declare variables outside inner loops (matching reference implementation for better compiler optimization)
                 IndexType t_acol;
@@ -202,7 +200,7 @@ void spgemm_Flength_hash_numeric_omp_lb(
                 // For each column in this cluster
                 // reuse col-index of A, then rows of matrix B have cache locality
                 for (IndexType j = col_start; j < col_end; ++j) {
-                    t_acol = A_cluster.colids[j];
+                    t_acol = acol[j];
                     // Pre-compute base index for A_cluster.values to reduce repeated calculations
                     IndexType a_val_base = j * cluster_sz;
                     // Multiply with B[t_acol, :]
@@ -216,7 +214,7 @@ void spgemm_Flength_hash_numeric_omp_lb(
                                 // Pre-compute base index for ht_value to reduce repeated calculations
                                 IndexType ht_val_base = hash * cluster_sz;
                                 for (IndexType l = 0; l < cluster_sz; l++) {
-                                    t_aval = A_cluster.values[a_val_base + l];
+                                    t_aval = aval[a_val_base + l];
                                     // Zero-value check: avoid flop when (A.value[] == 0.0) (matching reference implementation)
                                     if (std::abs(t_aval) >= eps) {
                                         t_val = t_aval * t_bval;
@@ -231,7 +229,7 @@ void spgemm_Flength_hash_numeric_omp_lb(
                                 // Pre-compute base index for ht_value to reduce repeated calculations
                                 IndexType ht_val_base = hash * cluster_sz;
                                 for (IndexType l = 0; l < cluster_sz; l++) {
-                                    t_aval = A_cluster.values[a_val_base + l];
+                                    t_aval = aval[a_val_base + l];
                                     t_val = t_aval * t_bval;
                                     // ht_value will be automatically initialized by 0.0 if t_val is zero
                                     ht_value[ht_val_base + l] = t_val;
@@ -260,15 +258,15 @@ void spgemm_Flength_hash_numeric_omp_lb(
 #include <cstdint>
 
 template void spgemm_Flength_hash_symbolic_omp_lb<int64_t, float>(
-    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN_FlengthCluster<int64_t, float>*);
+    const int64_t*, const int64_t*, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN_FlengthCluster<int64_t, float>*);
 template void spgemm_Flength_hash_symbolic_omp_lb<int64_t, double>(
-    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN_FlengthCluster<int64_t, double>*);
+    const int64_t*, const int64_t*, const int64_t*, const int64_t*, int64_t, int64_t, int64_t*, int64_t&, SpGEMM_BIN_FlengthCluster<int64_t, double>*);
 
 template void spgemm_Flength_hash_numeric_omp_lb<false, int64_t, float>(
-    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t, const float);
+    const int64_t*, const int64_t*, const float*, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t, int64_t, const float);
 template void spgemm_Flength_hash_numeric_omp_lb<false, int64_t, double>(
-    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t, const double);
+    const int64_t*, const int64_t*, const double*, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t, int64_t, const double);
 template void spgemm_Flength_hash_numeric_omp_lb<true, int64_t, float>(
-    const CSR_FlengthCluster<int64_t, float>&, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t, const float);
+    const int64_t*, const int64_t*, const float*, const int64_t*, const int64_t*, const float*, int64_t, int64_t, const int64_t*, int64_t*, float*, SpGEMM_BIN_FlengthCluster<int64_t, float>*, int64_t, int64_t, const float);
 template void spgemm_Flength_hash_numeric_omp_lb<true, int64_t, double>(
-    const CSR_FlengthCluster<int64_t, double>&, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t, const double);
+    const int64_t*, const int64_t*, const double*, const int64_t*, const int64_t*, const double*, int64_t, int64_t, const int64_t*, int64_t*, double*, SpGEMM_BIN_FlengthCluster<int64_t, double>*, int64_t, int64_t, const double);
