@@ -36,8 +36,10 @@ inline void sort_and_store_table2mat_vlcluster(IndexType *ht_check, ValueType *h
     IndexType val_idx, ht_idx;
     // Sort elements in ascending order if necessary, and store them as output matrix
     if (sortOutput) {
-        // TODO: Implement sorting if needed (currently disabled in reference)
-        // For now, just store without sorting (matching reference implementation)
+        // Collect all non-zero entries from hash table: <col-id, position-in-hashtable>
+        std::vector<std::pair<IndexType, IndexType>> p_vec;
+        p_vec.reserve(nz);  // Reserve space for better performance
+        
         for (IndexType j = 0; j < ht_size; ++j) {
             if (ht_check[j] != -1) {
                 // Check if all values in this cluster are zero (matching reference implementation)
@@ -52,13 +54,23 @@ inline void sort_and_store_table2mat_vlcluster(IndexType *ht_check, ValueType *h
                 
                 // Only store if not all zero (matching reference implementation)
                 if (!all_zero) {
-                    colids[index] = ht_check[j];
-                    val_idx = index * cluster_sz;  // Matching reference: val_idx = (index * cluster_sz)
-                    for (IndexType l = 0; l < cluster_sz; l++) {
-                        values[val_idx + l] = ht_value[ht_idx + l];
-                    }
-                    index++;
+                    p_vec.push_back(std::make_pair(ht_check[j], j));
                 }
+            }
+        }
+        
+        // Sort by column ID in ascending order
+        std::sort(p_vec.begin(), p_vec.end(), [](const std::pair<IndexType, IndexType> &a, const std::pair<IndexType, IndexType> &b) {
+            return a.first < b.first;
+        });
+        
+        // Store the results in variable-length cluster format (sorted by column ID)
+        for (IndexType j = 0; j < static_cast<IndexType>(p_vec.size()); ++j) {
+            colids[j] = p_vec[j].first;
+            val_idx = j * cluster_sz;  // Matching reference: val_idx = (index * cluster_sz)
+            ht_idx = p_vec[j].second * cluster_sz;
+            for (IndexType l = 0; l < cluster_sz; l++) {
+                values[val_idx + l] = ht_value[ht_idx + l];
             }
         }
     }

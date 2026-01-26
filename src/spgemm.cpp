@@ -11,6 +11,7 @@
 #include "../include/spgemm_Flength_hash.h"
 #include "../include/spgemm_Flength_array.h"
 #include "../include/spgemm_Vlength_hash.h"
+#include "../include/spgemm_Vlength_array.h"
 #include "../include/sparse_conversion.h"
 #include "../include/sparse_operation.h"
 #include <cassert>
@@ -461,6 +462,83 @@ void LeSpGEMM_hash_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_clu
 }
 
 template <bool sortOutput, typename IndexType, typename ValueType>
+void LeSpGEMM_array_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
+                             const CSR_Matrix<IndexType, ValueType> &B,
+                             CSR_VlengthCluster<IndexType, ValueType> &C_cluster)
+{
+    // Create BIN for cluster-level load balancing
+    // Matching reference: BIN_VlengthCluster<IT, NT> bin(a.rows, MIN_HT_S, a.cluster_sz);
+    SpGEMM_BIN_VlengthCluster<IndexType, ValueType> *bin = 
+        new SpGEMM_BIN_VlengthCluster<IndexType, ValueType>(A_cluster.rows, MIN_HT_S, A_cluster.cluster_sz);
+    
+    // Sanity checks
+    assert(A_cluster.cols == B.num_rows);
+    
+    // Initialize output cluster matrix
+    C_cluster.csr_rows = A_cluster.csr_rows;
+    C_cluster.rows = A_cluster.rows;
+    C_cluster.cols = B.num_cols;
+    
+    // Allocate and copy cluster_sz array (matching reference)
+    C_cluster.cluster_sz = new_array<IndexType>(A_cluster.rows);
+    std::memcpy(C_cluster.cluster_sz, A_cluster.cluster_sz, sizeof(IndexType) * A_cluster.rows);
+    
+    // Adapt field names for B matrix
+    const IndexType *brpt = B.row_offset;
+    const IndexType *bcol = B.col_index;
+    const ValueType *bval = B.values;
+    
+    // Set max bin (calls set_intprod_num, set_clusters_offset, set_bin_id)
+    // Matching reference implementation: bin.set_max_bin(a.rowptr, a.colids, b.rowptr, c.cols)
+    bin->set_max_bin(A_cluster.rowptr, A_cluster.colids, brpt, C_cluster.cols);
+    
+    // Note: Array-based method does NOT need create_local_hash_table
+    // Each cluster will use sorted arrays instead of hash tables
+    
+    // Allocate cluster pointers (for output CSR_VlengthCluster matrix C)
+    // Matching reference: c.rowptr = my_malloc<IT>(c.rows + 1); c.rowptr_val = my_malloc<IT>(c.rows + 1);
+    C_cluster.rowptr = new_array<IndexType>(C_cluster.rows + 1);
+    C_cluster.rowptr_val = new_array<IndexType>(C_cluster.rows + 1);
+    
+    // Symbolic Phase: generate and sort Ccolids (optimized version)
+    // Note: spgemm_Vlength_array_symbolic_new will allocate ccolids internally after scan
+    spgemm_Vlength_array_symbolic_new<IndexType, ValueType>(
+        A_cluster, brpt, bcol,
+        C_cluster.rows, C_cluster.cols,
+        C_cluster.rowptr, C_cluster.rowptr_val,
+        C_cluster.colids, C_cluster.nnzc, C_cluster.nnzv, bin);
+    
+    // Allocate values array (will be filled in numeric phase)
+    // Length: c_nnzv (computed from weighted scan in symbolic phase)
+    C_cluster.values = new_array<ValueType>(C_cluster.nnzv);
+    
+    // Numeric Phase: find position and accumulate (optimized version)
+    // Note: sortOutput is ignored since ccolids is already sorted from symbolic phase
+    spgemm_Vlength_array_numeric_new<sortOutput, IndexType, ValueType>(
+        A_cluster, brpt, bcol, bval,
+        C_cluster.rows, C_cluster.cols,
+        C_cluster.rowptr, C_cluster.rowptr_val,
+        C_cluster.colids, C_cluster.values,
+        C_cluster.cluster_sz, bin);
+    
+    // Set Matrix_Features fields
+    C_cluster.num_rows = C_cluster.csr_rows;
+    C_cluster.num_cols = C_cluster.cols;
+    // C_cluster.num_nnzs = C_cluster.nnzv;  // Total number of stored values
+    
+    // Calculate max_cluster_sz (for compatibility)
+    C_cluster.max_cluster_sz = 0;
+    for (IndexType i = 0; i < C_cluster.rows; i++) {
+        if (C_cluster.cluster_sz[i] > C_cluster.max_cluster_sz) {
+            C_cluster.max_cluster_sz = C_cluster.cluster_sz[i];
+        }
+    }
+    
+    // Cleanup
+    delete bin;
+}
+
+template <bool sortOutput, typename IndexType, typename ValueType>
 void LeSpGEMM_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
                       const CSR_Matrix<IndexType, ValueType> &B,
                       CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
@@ -468,9 +546,12 @@ void LeSpGEMM_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
 {
     // Select implementation based on kernel_flag
     // kernel_flag = 1: Hash-based cluster-wise method (default)
-    // kernel_flag = 2: Array-based cluster-wise method (future)
+    // kernel_flag = 2: Array-based cluster-wise method (HSMU-SpGEMM inspired, sorted arrays)
     if (kernel_flag == 1) {
         LeSpGEMM_hash_VLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
+    } else if (kernel_flag == 2) {
+        // Array-based cluster-wise method (HSMU-SpGEMM inspired)
+        LeSpGEMM_array_VLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
     } else {
         // Default to hash-based cluster-wise method
         LeSpGEMM_hash_VLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
@@ -621,6 +702,20 @@ template void LeSpGEMM_hash_VLength<true, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
     CSR_VlengthCluster<int64_t, double>&);
 template void LeSpGEMM_hash_VLength<false, int64_t, double>(
+    const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_VlengthCluster<int64_t, double>&);
+
+// LeSpGEMM_array_VLength instantiations (sortOutput = true and false)
+template void LeSpGEMM_array_VLength<true, int64_t, float>(
+    const CSR_VlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_VlengthCluster<int64_t, float>&);
+template void LeSpGEMM_array_VLength<false, int64_t, float>(
+    const CSR_VlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
+    CSR_VlengthCluster<int64_t, float>&);
+template void LeSpGEMM_array_VLength<true, int64_t, double>(
+    const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
+    CSR_VlengthCluster<int64_t, double>&);
+template void LeSpGEMM_array_VLength<false, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
     CSR_VlengthCluster<int64_t, double>&);
 

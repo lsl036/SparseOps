@@ -58,7 +58,7 @@ void usage(int argc, char** argv)
     std::cout << "\t" << " --threads   = define the num of omp threads (default: all cores)\n";
     std::cout << "\t" << " --test_type = correctness or performance (default)\n";
     std::cout << "\t" << " --iterations= number of iterations for performance test (default: 10)\n";
-    std::cout << "\t" << " --kernel    = 1 (Hash-based variable-length cluster-wise:default)\n";
+    std::cout << "\t" << " --kernel    = 1 (Hash-based variable-length cluster-wise:default) or 2 (Array-based variable-length cluster-wise)\n";
     std::cout << "\t" << " --avg_cluster_sz = average cluster size (default: 8, used for simple method)\n";
     std::cout << "\t" << " --similarity_th = similarity threshold for Jaccard-based clustering (default: 0.3)\n";
     std::cout << "\t" << " --max_cluster_size = maximum cluster size (-1 for unlimited, default: 8)\n";
@@ -123,6 +123,8 @@ void test_spgemm_vlength_correctness(const char *matA_path, const char *matB_pat
     cout << "\n--- Testing Kernel " << kernel_flag << " ---" << endl;
     if (kernel_flag == 1) {
         cout << "Kernel: Hash-based variable-length cluster-wise SpGEMM (OpenMP with load balancing)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << "Kernel: Array-based variable-length cluster-wise SpGEMM (HSMU-SpGEMM inspired, sorted arrays)" << endl;
     } else {
         cout << "Kernel: Unknown kernel flag, defaulting to Hash-based variable-length cluster-wise" << endl;
     }
@@ -179,6 +181,8 @@ void test_spgemm_vlength_correctness(const char *matA_path, const char *matB_pat
     std::string suffix_str;
     if (kernel_flag == 1) {
         suffix_str = "hashvlengthcluster";
+    } else if (kernel_flag == 2) {
+        suffix_str = "arrayvlengthcluster";
     } else {
         suffix_str = "hashvlengthcluster";  // default
     }
@@ -272,6 +276,8 @@ void test_spgemm_vlength_performance(const char *matA_path, const char *matB_pat
     cout << "\n--- Kernel " << kernel_flag << " Performance ---" << endl;
     if (kernel_flag == 1) {
         cout << "Kernel: Hash-based variable-length cluster-wise SpGEMM (OpenMP with load balancing)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << "Kernel: Array-based variable-length cluster-wise SpGEMM (HSMU-SpGEMM inspired, sorted arrays)" << endl;
     } else {
         cout << "Kernel: Unknown kernel flag, defaulting to Hash-based variable-length cluster-wise" << endl;
     }
@@ -374,8 +380,8 @@ void run_spgemm_vlength_test(int argc, char **argv)
     char *kernel_str = get_argval(argc, argv, "kernel");
     if(kernel_str != NULL) {
         kernel_flag = atoi(kernel_str);
-        if(kernel_flag != 1) {
-            printf("Error: kernel must be 1 (Hash-based variable-length cluster-wise)\n");
+        if(kernel_flag != 1 && kernel_flag != 2) {
+            printf("Error: kernel must be 1 (Hash-based variable-length cluster-wise) or 2 (Array-based variable-length cluster-wise)\n");
             return;
         }
     }
@@ -427,6 +433,8 @@ void run_spgemm_vlength_test(int argc, char **argv)
     cout << "Kernel: " << kernel_flag;
     if (kernel_flag == 1) {
         cout << " (Hash-based variable-length cluster-wise)" << endl;
+    } else if (kernel_flag == 2) {
+        cout << " (Array-based variable-length cluster-wise)" << endl;
     } else {
         cout << " (Unknown, defaulting to Hash-based variable-length cluster-wise)" << endl;
     }
