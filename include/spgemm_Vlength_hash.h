@@ -78,7 +78,7 @@ void spgemm_Vlength_hash_symbolic_omp_lb(
  * @param bin SpGEMM_BIN_VlengthCluster for load balancing
  * @param cnnz Total number of unique column IDs (for bounds checking)
  * @param cluster_sz Array of cluster sizes (length: c_clusters)
- * @param eps Epsilon for zero-value filtering (default: 0.000001f)
+ * @param eps Epsilon for zero-value filtering (default: 1e-12f)
  */
 template <bool sortOutput, typename IndexType, typename ValueType>
 void spgemm_Vlength_hash_numeric_omp_lb(
@@ -88,6 +88,6 @@ void spgemm_Vlength_hash_numeric_omp_lb(
     const IndexType *crpt, const IndexType *crpt_val,
     IndexType *ccolids, ValueType *cvalues,
     SpGEMM_BIN_VlengthCluster<IndexType, ValueType> *bin,
-    IndexType cnnz, const IndexType *cluster_sz, const ValueType eps = 0.000001f);
+    IndexType cnnz, const IndexType *cluster_sz, const ValueType eps = 1e-12f);
 
 #endif /* SPGEMM_VLENGTH_HASH_H */

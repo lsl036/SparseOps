@@ -1787,7 +1787,7 @@ CSR_Matrix<IndexType, ValueType> vlength_cluster2csr(const CSR_VlengthCluster<In
     csr.partition = nullptr;
     
     // Threshold for considering a value as non-zero (matching reference implementation)
-    const ValueType eps = static_cast<ValueType>(0.000001);
+    const ValueType eps = static_cast<ValueType>(1e-12);
     
     // Step 1: Count nnz per row (similar to symbolic phase of SpGEMM)
     IndexType *work = new_array<IndexType>(csr.num_rows);

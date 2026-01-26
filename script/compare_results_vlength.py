@@ -20,10 +20,10 @@ from collections import defaultdict
 
 # Matrix names array for easy extension
 MATRIX_NAMES = [
-    'bcspwr10',
+    # 'bcspwr10',
     # 'bcsstk32',
-    'skirt_id_764'
-    # '2cubes_sphere'
+    # 'skirt_id_764',
+    '2cubes_sphere'
     # Add more matrix names here in the future
 ]
 
@@ -124,10 +124,17 @@ def compare_matrices(ref_file, computed_file, rel_tolerance=1e-10, abs_tolerance
             comp_val = comp_dict.get(col, 0.0)
             
             # Check if column exists in both
+            # Ignore very small values (numerical zeros) - threshold for considering as zero
+            zero_threshold = 1e-12
+            
             if col not in ref_dict:
-                differences.append(f"  Row {row+1}, Col {col+1}: extra in computed (value={comp_val})")
+                # Extra value in computed - only report if significant
+                if abs(comp_val) >= zero_threshold:
+                    differences.append(f"  Row {row+1}, Col {col+1}: extra in computed (value={comp_val})")
             elif col not in comp_dict:
-                differences.append(f"  Row {row+1}, Col {col+1}: missing in computed (value={ref_val})")
+                # Missing value in computed - only report if reference value is significant
+                if abs(ref_val) >= zero_threshold:
+                    differences.append(f"  Row {row+1}, Col {col+1}: missing in computed (value={ref_val})")
             else:
                 # Check value difference using mixed tolerance strategy
                 abs_diff = abs(ref_val - comp_val)

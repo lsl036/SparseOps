@@ -30,7 +30,7 @@ inline void sort_and_store_table2mat_vlcluster(IndexType *ht_check, ValueType *h
                                                IndexType *colids, ValueType *values, 
                                                IndexType nz, IndexType ht_size, 
                                                IndexType cluster_sz,
-                                               const ValueType eps = static_cast<ValueType>(0.000001))
+                                               const ValueType eps = static_cast<ValueType>(1e-12))
 {
     IndexType index = 0;
     IndexType val_idx, ht_idx;
@@ -41,7 +41,6 @@ inline void sort_and_store_table2mat_vlcluster(IndexType *ht_check, ValueType *h
         for (IndexType j = 0; j < ht_size; ++j) {
             if (ht_check[j] != -1) {
                 // Check if all values in this cluster are zero (matching reference implementation)
-                // Reference: sort_and_store_table2mat_vlcluster_V1 filters zero entries
                 ht_idx = j * cluster_sz;
                 bool all_zero = true;
                 for (IndexType l = 0; l < cluster_sz; l++) {
@@ -65,11 +64,7 @@ inline void sort_and_store_table2mat_vlcluster(IndexType *ht_check, ValueType *h
     }
     else {
         // Store the results in variable-length cluster format
-        // Matching reference: sort_and_store_table2mat_vlcluster_V1 (line 128-139)
-        // Note: Reference function uses val_idx = (index * cluster_sz), not using offset parameter
-        // The offset parameter in reference is (cnnz - offset) but is not used in the function
-        // We pass cvalues + cval_offset as the values pointer, so val_idx calculation is correct
-        // Reference implementation filters out entries where all cluster values are zero
+        
         for (IndexType j = 0; j < ht_size; ++j) {
             if (ht_check[j] != -1) {
                 // Check if all values in this cluster are zero (matching reference implementation)
@@ -248,11 +243,8 @@ void spgemm_Vlength_hash_numeric_omp_lb(
                                     // Value from A: values[rowptr_val[i] + (j - rowptr[i]) * cluster_sz[i] + l]
                                     t_aval = aval[tmp1 + l];
                                     t_val = t_aval * bval[k];
-                                    // Zero-value check: avoid flop when (A.value[] == 0.0) (matching reference implementation)
-                                    // Matching reference: ht_value[tmp2] = addop(t_val, ht_value[tmp2]); tmp2++;
-                                    if (std::fabs(t_aval) >= eps) {
-                                        ht_value[tmp2] += t_val;
-                                    }
+                                    // 不进行 阈值判断，只在转化到 csr 格式时判断阈值
+                                    ht_value[tmp2] += t_val;
                                     tmp2++;
                                 }
                                 break;
@@ -265,9 +257,6 @@ void spgemm_Vlength_hash_numeric_omp_lb(
                                     // Value from A: values[rowptr_val[i] + (j - rowptr[i]) * cluster_sz[i] + l]
                                     t_aval = aval[tmp1 + l];
                                     t_val = t_aval * bval[k];
-                                    // Zero-value check: avoid storing zero when (A.value[] == 0.0) (matching reference implementation)
-                                    // Matching reference: ht_value[tmp2] = t_val; tmp2++;
-                                    // Note: We still store zero values here, they will be filtered in vlength_cluster2csr
                                     ht_value[tmp2] = t_val;
                                     tmp2++;
                                 }
