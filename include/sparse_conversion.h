@@ -2052,4 +2052,109 @@ std::vector<IndexType> read_row_permutation(const char *filename, IndexType num_
     return shuffled_rows;
 }
 
+/**
+ * @brief Transpose a CSR matrix
+ *        Converts CSR -> COO -> transpose (swap row/col) -> CSR
+ *        Uses compact=true in coo_to_csr to merge duplicate entries
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param csr Input CSR matrix (will not be modified)
+ * @return CSR_Matrix<IndexType, ValueType> Transposed CSR matrix
+ */
+template <typename IndexType, typename ValueType>
+CSR_Matrix<IndexType, ValueType> csr_transpose(const CSR_Matrix<IndexType, ValueType> &csr)
+{
+    // Handle empty matrix
+    if (csr.num_nnzs == 0) {
+        CSR_Matrix<IndexType, ValueType> transposed;
+        transposed.num_rows = csr.num_cols;
+        transposed.num_cols = csr.num_rows;
+        transposed.num_nnzs = 0;
+        transposed.tag = 0;
+        transposed.kernel_flag = 0;
+        transposed.partition = nullptr;
+        transposed.row_offset = new_array<IndexType>(transposed.num_rows + 1);
+        CHECK_ALLOC(transposed.row_offset);
+        std::fill_n(transposed.row_offset, transposed.num_rows + 1, static_cast<IndexType>(0));
+        transposed.col_index = nullptr;
+        transposed.values = nullptr;
+        return transposed;
+    }
+    
+    // Convert CSR to COO
+    COO_Matrix<IndexType, ValueType> coo = csr_to_coo(csr);
+    
+    // Transpose: swap row_index and col_index, and swap num_rows and num_cols
+    for (IndexType i = 0; i < coo.num_nnzs; ++i) {
+        IndexType temp = coo.row_index[i];
+        coo.row_index[i] = coo.col_index[i];
+        coo.col_index[i] = temp;
+    }
+    
+    // Swap dimensions
+    IndexType temp_rows = coo.num_rows;
+    coo.num_rows = coo.num_cols;
+    coo.num_cols = temp_rows;
+    
+    // Convert back to CSR with compact=true to merge duplicates
+    CSR_Matrix<IndexType, ValueType> transposed = coo_to_csr(coo, true);
+    
+    // Cleanup COO
+    delete_host_matrix(coo);
+    
+    return transposed;
+}
+
+/**
+ * @brief Convert a CSR matrix to binary pattern (all non-zero values set to 1.0)
+ *        Preserves the sparsity structure but replaces all values with 1.0
+ *        Useful for similarity computation where only pattern matters
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param csr Input CSR matrix (will not be modified)
+ * @return CSR_Matrix<IndexType, ValueType> Binary pattern CSR matrix
+ */
+template <typename IndexType, typename ValueType>
+CSR_Matrix<IndexType, ValueType> csr_to_binary_pattern(const CSR_Matrix<IndexType, ValueType> &csr)
+{
+    CSR_Matrix<IndexType, ValueType> binary;
+    
+    // Copy dimensions
+    binary.num_rows = csr.num_rows;
+    binary.num_cols = csr.num_cols;
+    binary.num_nnzs = csr.num_nnzs;
+    binary.tag = 0;
+    binary.kernel_flag = csr.kernel_flag;
+    binary.partition = nullptr;
+    
+    // Handle empty matrix
+    if (csr.num_nnzs == 0) {
+        binary.row_offset = new_array<IndexType>(binary.num_rows + 1);
+        CHECK_ALLOC(binary.row_offset);
+        std::fill_n(binary.row_offset, binary.num_rows + 1, static_cast<IndexType>(0));
+        binary.col_index = nullptr;
+        binary.values = nullptr;
+        return binary;
+    }
+    
+    // Allocate arrays
+    binary.row_offset = new_array<IndexType>(binary.num_rows + 1);
+    CHECK_ALLOC(binary.row_offset);
+    binary.col_index = new_array<IndexType>(binary.num_nnzs);
+    CHECK_ALLOC(binary.col_index);
+    binary.values = new_array<ValueType>(binary.num_nnzs);
+    CHECK_ALLOC(binary.values);
+    
+    // Copy row_offset and col_index
+    std::copy(csr.row_offset, csr.row_offset + (binary.num_rows + 1), binary.row_offset);
+    std::copy(csr.col_index, csr.col_index + binary.num_nnzs, binary.col_index);
+    
+    // Set all values to 1.0
+    std::fill_n(binary.values, binary.num_nnzs, static_cast<ValueType>(1.0));
+    
+    return binary;
+}
+
 #endif /* SPARSE_CONVERSION_H */

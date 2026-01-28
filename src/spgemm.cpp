@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 
 template <typename IndexType, typename ValueType>
 long long int get_spgemm_flop(const CSR_Matrix<IndexType, ValueType> &A,
@@ -584,6 +585,142 @@ void LeSpGEMM(const CSR_Matrix<IndexType, ValueType> &A,
     }
 }
 
+template <typename IndexType, typename ValueType>
+void HashSpGEMMTopK(const CSR_Matrix<IndexType, ValueType> &A,
+                    CSR_Matrix<IndexType, ValueType> &C,
+                    IndexType top_k)
+{
+    // Step 1: Convert A to binary pattern (all non-zero values set to 1.0)
+    CSR_Matrix<IndexType, ValueType> A_binary = csr_to_binary_pattern<IndexType, ValueType>(A);
+    
+    // Step 2: Compute transpose AT
+    CSR_Matrix<IndexType, ValueType> AT = csr_transpose<IndexType, ValueType>(A_binary);
+    
+    // Step 3: Compute similarity matrix C = A_binary * AT_binary with top-k selection
+    // Use hash-based row-wise SpGEMM with direct top-k selection in numeric phase
+    // This matches the reference implementation approach
+    
+    // Sanity checks
+    assert(A_binary.num_cols == AT.num_rows);
+    
+    // Initialize output matrix
+    C.num_rows = A_binary.num_rows;
+    C.num_cols = AT.num_cols;
+    C.tag = 0;
+    C.kernel_flag = 0;
+    C.partition = nullptr;
+    
+    // Adapt field names
+    const IndexType *arpt = A_binary.row_offset;
+    const IndexType *acol = A_binary.col_index;
+    const ValueType *aval = A_binary.values;
+    
+    const IndexType *brpt = AT.row_offset;
+    const IndexType *bcol = AT.col_index;
+    const ValueType *bval = AT.values;
+    
+    // Create BIN for load balancing (matching reference implementation)
+    SpGEMM_BIN<IndexType, ValueType> *bin = new SpGEMM_BIN<IndexType, ValueType>(A_binary.num_rows, MIN_HT_S);
+    
+    // Set max bin
+    bin->set_max_bin(arpt, acol, brpt, C.num_rows, C.num_cols);
+    
+    // Create hash table (thread local)
+    bin->create_local_hash_table(C.num_cols);
+    
+    // Allocate row pointer for symbolic phase
+    IndexType *cpt = new_array<IndexType>(C.num_rows + 1);
+    CHECK_ALLOC(cpt);
+    IndexType c_nnz = 0;
+    
+    // Symbolic Phase: compute structure (needed to know hash table sizes)
+    spgemm_hash_symbolic_omp_lb<IndexType, ValueType>(arpt, acol, brpt, bcol,
+                                  C.num_rows, C.num_cols,
+                                  cpt, c_nnz, bin);
+    
+    // Re-adjust bin_id after symbolic phase
+    bin->set_bin_id(C.num_rows, C.num_cols, bin->min_ht_size);
+    
+    // Allocate temporary arrays for numeric phase (based on symbolic phase results)
+    // These arrays will be large enough to hold all results before top-k selection
+    IndexType *ccol_temp = new_array<IndexType>(c_nnz);
+    CHECK_ALLOC(ccol_temp);
+    ValueType *cval_temp = new_array<ValueType>(c_nnz);
+    CHECK_ALLOC(cval_temp);
+    
+    // Allocate row_nnz array to store actual nnz per row after top-k selection
+    IndexType *row_nnz = new_array<IndexType>(C.num_rows);
+    CHECK_ALLOC(row_nnz);
+    std::fill_n(row_nnz, C.num_rows, static_cast<IndexType>(0));
+    
+    // Memory allocation output (matching reference implementation)
+    double bin_size_gb = bin->calculate_size_in_gb();
+    std::cout << "[DONE] memory allocation: " << bin_size_gb << " GB" << std::endl;
+    
+    // Numeric Phase with Top-K selection: compute values and keep only top-k per row
+    // Matching reference hash_numeric_topk implementation
+    // The values stored in cval_temp are already similarity scores (intersection sizes)
+    spgemm_hash_numeric_topk_omp_lb<IndexType, ValueType>(arpt, acol, aval,
+                                                           brpt, bcol, bval,
+                                                           C.num_rows, C.num_cols,
+                                                           cpt, ccol_temp, cval_temp,
+                                                           top_k, row_nnz, bin);
+    
+    // Count total nnz after top-k selection
+    IndexType total_nnz = 0;
+    for (IndexType i = 0; i < C.num_rows; ++i) {
+        total_nnz += row_nnz[i];
+    }
+    
+    C.num_nnzs = total_nnz;
+    
+    // Allocate final output arrays
+    C.row_offset = new_array<IndexType>(C.num_rows + 1);
+    CHECK_ALLOC(C.row_offset);
+    
+    if (C.num_nnzs > 0) {
+        C.col_index = new_array<IndexType>(C.num_nnzs);
+        CHECK_ALLOC(C.col_index);
+        C.values = new_array<ValueType>(C.num_nnzs);
+        CHECK_ALLOC(C.values);
+        
+        // Compute row_offset using prefix sum
+        C.row_offset[0] = 0;
+        for (IndexType i = 0; i < C.num_rows; ++i) {
+            C.row_offset[i + 1] = C.row_offset[i] + row_nnz[i];
+        }
+        
+        // Copy top-k results from temporary arrays to final arrays
+        #pragma omp parallel for
+        for (IndexType i = 0; i < C.num_rows; ++i) {
+            IndexType src_start = cpt[i];
+            IndexType dst_start = C.row_offset[i];
+            IndexType count = row_nnz[i];
+            
+            for (IndexType j = 0; j < count; ++j) {
+                C.col_index[dst_start + j] = ccol_temp[src_start + j];
+                C.values[dst_start + j] = cval_temp[src_start + j];
+            }
+        }
+    } else {
+        // Empty matrix case
+        C.col_index = nullptr;
+        C.values = nullptr;
+        std::fill_n(C.row_offset, C.num_rows + 1, static_cast<IndexType>(0));
+    }
+    
+    // Cleanup temporary arrays
+    delete_array(ccol_temp);
+    delete_array(cval_temp);
+    delete_array(row_nnz);
+    
+    // Cleanup
+    delete_array(cpt);
+    delete bin;
+    delete_host_matrix(A_binary);
+    delete_host_matrix(AT);
+}
+
 // Explicit template instantiations for SpGEMM (only int64_t for IndexType)
 template long long int get_spgemm_flop<int64_t, float>(
     const CSR_Matrix<int64_t, float>&, const CSR_Matrix<int64_t, float>&);
@@ -732,4 +869,10 @@ template void LeSpGEMM_VLength<true, int64_t, double>(
 template void LeSpGEMM_VLength<false, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
     CSR_VlengthCluster<int64_t, double>&, int);
+
+// HashSpGEMMTopK instantiations
+template void HashSpGEMMTopK<int64_t, float>(
+    const CSR_Matrix<int64_t, float>&, CSR_Matrix<int64_t, float>&, int64_t);
+template void HashSpGEMMTopK<int64_t, double>(
+    const CSR_Matrix<int64_t, double>&, CSR_Matrix<int64_t, double>&, int64_t);
 

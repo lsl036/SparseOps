@@ -195,5 +195,24 @@ void LeSpGEMM_hash_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_clu
                            const CSR_Matrix<IndexType, ValueType> &B,
                            CSR_VlengthCluster<IndexType, ValueType> &C_cluster);
 
+/**
+ * @brief HashSpGEMMTopK: Compute A * AT with binary pattern and keep top-k similarities per row
+ *        Used for generating candidate pairs in hierarchical clustering
+ *        - Converts A to binary pattern (all non-zero values set to 1.0)
+ *        - Computes A_binary * AT_binary (similarity matrix)
+ *        - For each row, keeps only top-k largest similarity values (excluding diagonal)
+ *        - Result C[i][j] represents the similarity (intersection size) between row i and row j
+ * 
+ * @tparam IndexType 
+ * @tparam ValueType 
+ * @param A Input matrix A in CSR format
+ * @param C Output matrix C in CSR format (will be allocated, contains top-k similarities per row)
+ * @param top_k Number of top similarities to keep per row (default: 7)
+ */
+template <typename IndexType, typename ValueType>
+void HashSpGEMMTopK(const CSR_Matrix<IndexType, ValueType> &A,
+                    CSR_Matrix<IndexType, ValueType> &C,
+                    IndexType top_k = 7);
+
 #endif /* SPGEMM_H */
 
