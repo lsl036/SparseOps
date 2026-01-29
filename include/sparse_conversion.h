@@ -1787,7 +1787,7 @@ CSR_Matrix<IndexType, ValueType> vlength_cluster2csr(const CSR_VlengthCluster<In
     csr.partition = nullptr;
     
     // Threshold for considering a value as non-zero (matching reference implementation)
-    const ValueType eps = static_cast<ValueType>(1e-12);
+    const ValueType eps = static_cast<ValueType>(0.0);
     
     // Step 1: Count nnz per row (similar to symbolic phase of SpGEMM)
     IndexType *work = new_array<IndexType>(csr.num_rows);
@@ -1806,7 +1806,7 @@ CSR_Matrix<IndexType, ValueType> vlength_cluster2csr(const CSR_VlengthCluster<In
             
             for (IndexType l = 0; l < cluster.cluster_sz[i]; l += 1) {  // Loop over rows in cluster
                 ValueType val = cluster.values[val_idx + l];
-                if (std::abs(val) >= eps) {
+                if (std::abs(val) > eps) {
                     work[row_id + l]++;
                     csr.num_nnzs++;
                 }
@@ -1838,7 +1838,7 @@ CSR_Matrix<IndexType, ValueType> vlength_cluster2csr(const CSR_VlengthCluster<In
                 
                 for (IndexType l = 0; l < cluster.cluster_sz[i]; l += 1) {  // Loop over rows in cluster
                     ValueType val = cluster.values[val_idx + l];
-                    if (std::abs(val) >= eps) {
+                    if (std::abs(val) > eps) {
                         IndexType pos = work[row_id + l]++;
                         csr.col_index[pos] = col_id;
                         csr.values[pos] = val;

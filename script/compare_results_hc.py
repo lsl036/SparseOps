@@ -5,11 +5,11 @@ Compares computed results with reference results.
 Supports kernel 1 (hash-based variable-length cluster) and kernel 2 (array-based variable-length cluster).
 
 Usage:
-    python3 compare_results_vlength.py [--kernel=1|2|hashvlengthcluster|arrayvlengthcluster] [--rel-tol=1e-10] [--abs-tol=1e-6]
+    python3 compare_results_vlength.py [--kernel=1|2|hashvlengthcluster_hc|arrayvlengthcluster_hc] [--rel-tol=1e-10] [--abs-tol=1e-6]
     
     --kernel: Select kernel to compare (default: 1)
-              1 or hashvlengthcluster: Hash-based variable-length cluster kernel
-              2 or arrayvlengthcluster: Array-based variable-length cluster kernel
+              1 or hashvlengthcluster_hc: Hash-based variable-length cluster kernel
+              2 or arrayvlengthcluster_hc: Array-based variable-length cluster kernel
     --rel-tol: Relative error tolerance (default: 1e-10)
     --abs-tol: Absolute error tolerance (default: 1e-6)
 """ 
@@ -21,11 +21,8 @@ from collections import defaultdict
 
 # Matrix names array for easy extension
 MATRIX_NAMES = [
-    # 'bcspwr10',
-    # 'bcsstk32',
-    # 'skirt_id_764',
-    # '2cubes_sphere'
-    'poisson3Da'
+    'poisson3Da',
+    'cant'
     # Add more matrix names here in the future
 ]
 
@@ -164,33 +161,33 @@ def compare_matrices(ref_file, computed_file, rel_tolerance=1e-10, abs_tolerance
 def parse_kernel_arg(kernel_arg):
     """
     Parse kernel argument and return suffix string.
-    Returns: suffix string (e.g., "hashvlengthcluster" or "arrayvlengthcluster")
+    Returns: suffix string (e.g., "hashvlengthcluster_hc" or "arrayvlengthcluster_hc")
     """
     if kernel_arg is None:
-        return "hashvlengthcluster"  # Default to kernel 1
+        return "hashvlengthcluster_hc"  # Default to kernel 1
     
     kernel_arg = str(kernel_arg).lower()
     
     # Support numeric values
     if kernel_arg == "1":
-        return "hashvlengthcluster"
+        return "hashvlengthcluster_hc"
     elif kernel_arg == "2":
-        return "arrayvlengthcluster"
+        return "arrayvlengthcluster_hc"
     # Support string values
-    elif kernel_arg == "hashvlengthcluster" or kernel_arg == "hashvlength":
-        return "hashvlengthcluster"
-    elif kernel_arg == "arrayvlengthcluster" or kernel_arg == "arrayvlength":
-        return "arrayvlengthcluster"
+    elif kernel_arg == "hashvlengthcluster_hc" or kernel_arg == "hashvlength":
+        return "hashvlengthcluster_hc"
+    elif kernel_arg == "arrayvlengthcluster_hc" or kernel_arg == "arrayvlength":
+        return "arrayvlengthcluster_hc"
     else:
-        print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashvlengthcluster")
-        return "hashvlengthcluster"
+        print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashvlengthcluster_hc")
+        return "hashvlengthcluster_hc"
 
 
 def get_kernel_display_name(suffix):
     """Get human-readable kernel name from suffix."""
-    if suffix == "hashvlengthcluster":
+    if suffix == "hashvlengthcluster_hc":
         return "Hash-based variable-length cluster"
-    elif suffix == "arrayvlengthcluster":
+    elif suffix == "arrayvlengthcluster_hc":
         return "Array-based variable-length cluster"
     else:
         return f"Unknown ({suffix})"
@@ -205,9 +202,9 @@ def main():
         epilog="""
 Examples:
   python3 compare_results_vlength.py --kernel=1
-  python3 compare_results_vlength.py --kernel=hashvlengthcluster
+  python3 compare_results_vlength.py --kernel=hashvlengthcluster_hc
   python3 compare_results_vlength.py --kernel=2
-  python3 compare_results_vlength.py --kernel=arrayvlengthcluster
+  python3 compare_results_vlength.py --kernel=arrayvlengthcluster_hc
   python3 compare_results_vlength.py --kernel=1 --rel-tol=1e-12 --abs-tol=1e-8
         """
     )
@@ -216,8 +213,8 @@ Examples:
         "--kernel",
         type=str,
         default="1",
-        help="Kernel to compare: 1 or hashvlengthcluster (Hash-based variable-length cluster, default), "
-             "2 or arrayvlengthcluster (Array-based variable-length cluster)"
+        help="Kernel to compare: 1 or hashvlengthcluster_hc (Hash-based variable-length cluster, default), "
+             "2 or arrayvlengthcluster_hc (Array-based variable-length cluster)"
     )
     parser.add_argument(
         "--rel-tol",

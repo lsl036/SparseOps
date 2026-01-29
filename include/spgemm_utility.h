@@ -18,6 +18,9 @@
 #include <set>
 #include <vector>
 #include <algorithm>
+#include <map>
+#include <queue>
+#include <utility>
 
 // ============================================================================
 // Sequential Scan Functions (for small arrays)
@@ -435,6 +438,121 @@ inline std::vector<IndexType> generate_offsets_jaccard(
     }
     
     return offsets;
+}
+
+// ============================================================================
+// Hierarchical Clustering (reference: HierarchicalClusterSpGEMM.cpp)
+// ============================================================================
+
+/**
+ * @brief Hierarchical clustering v0: Union-Find + priority queue by similarity from close_pairs.
+ *        Returns map<root, vector<row indices in that cluster>>.
+ * @param rowptr A's row pointer (CSR)
+ * @param colids A's column indices (CSR)
+ * @param num_rows A's number of rows
+ * @param close_pairs (i,j) -> similarity; may be extended with on-the-fly Jaccard for root pairs
+ * @param cluster_size Maximum cluster size; when a root's size >= cluster_size, it is marked invalid
+ */
+template <typename IndexType, typename ValueType>
+inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
+    const IndexType *rowptr, const IndexType *colids, IndexType num_rows,
+    std::map<std::pair<IndexType, IndexType>, ValueType> &close_pairs,
+    IndexType cluster_size)
+{
+    using item_t = std::pair<ValueType, std::pair<IndexType, IndexType>>;
+    auto cmp = [](const item_t &a, const item_t &b) { return a.first < b.first; };
+    std::priority_queue<item_t, std::vector<item_t>, decltype(cmp)> sims(cmp);
+
+    for (const auto &p : close_pairs) {
+        sims.push(std::make_pair(p.second, p.first));
+    }
+
+    std::vector<IndexType> clusters(num_rows);
+    std::vector<IndexType> sz(num_rows);
+    std::vector<int> valid(num_rows, 1);
+    for (IndexType i = 0; i < num_rows; i++) {
+        clusters[i] = i;
+        sz[i] = 1;
+    }
+    int nclusters = static_cast<int>(num_rows);
+
+    while (!sims.empty() && nclusters != 0) {
+        item_t s = sims.top();
+        sims.pop();
+        IndexType i = s.second.first;
+        IndexType j = s.second.second;
+        if (i >= num_rows || j >= num_rows) continue;
+
+        if (clusters[i] == i && clusters[j] == j) {
+            if (!valid[i] || !valid[j]) continue;
+            nclusters--;
+            if (sz[i] < sz[j]) {
+                clusters[i] = j;
+                sz[j] += sz[i];
+                if (sz[j] >= cluster_size) {
+                    valid[j] = 0;
+                    nclusters--;
+                }
+            } else {
+                clusters[j] = i;
+                sz[i] += sz[j];
+                if (sz[i] >= cluster_size) {
+                    valid[i] = 0;
+                    nclusters--;
+                }
+            }
+        } else {
+            while (i != clusters[i]) {
+                clusters[i] = clusters[clusters[i]];
+                i = clusters[i];
+            }
+            while (j != clusters[j]) {
+                clusters[j] = clusters[clusters[j]];
+                j = clusters[j];
+            }
+            if (!valid[i] || !valid[j]) continue;
+            if (i != j) {
+                auto p = std::make_pair(i, j);
+                if (close_pairs.find(p) == close_pairs.end()) {
+                    ValueType s_val = static_cast<ValueType>(jaccard_similarity<IndexType, ValueType>(rowptr, colids, i, j));
+                    sims.push(std::make_pair(s_val, p));
+                    close_pairs[p] = s_val;
+                }
+            }
+        }
+    }
+
+    std::map<IndexType, std::vector<IndexType>> reordered_dict;
+    for (IndexType i = 0; i < num_rows; i++) {
+        IndexType j = i;
+        while (j != clusters[j]) j = clusters[j];
+        reordered_dict[j].push_back(i);
+    }
+    return reordered_dict;
+}
+
+/**
+ * @brief Convert reordered_dict (map<root, vector<row indices>>) to permutation and offsets
+ *        permutation[new_row] = original row index; offsets = [0, len0, len0+len1, ...].
+ */
+template <typename IndexType>
+inline void reordered_dict_to_permutation_and_offsets(
+    const std::map<IndexType, std::vector<IndexType>> &reordered_dict,
+    IndexType num_rows,
+    std::vector<IndexType> &permutation_out,
+    std::vector<IndexType> &offsets_out)
+{
+    permutation_out.clear();
+    offsets_out.clear();
+    offsets_out.push_back(0);
+    for (const auto &kv : reordered_dict) {
+        const std::vector<IndexType> &rows = kv.second;
+        for (IndexType r : rows) {
+            permutation_out.push_back(r);
+        }
+        offsets_out.push_back(static_cast<IndexType>(permutation_out.size()));
+    }
+    (void)num_rows;
 }
 
 #endif /* SPGEMM_UTILITY_H */
