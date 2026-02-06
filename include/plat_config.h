@@ -9,10 +9,10 @@
 #define NUMA_REGIONS 2
 
 // Cache size in Bytes
-#define CPU_L3CACHE_SIZE 403701760
-#define CPU_L2CACHE_SIZE 29360128
-#define CPU_L1DCACHE_SIZE 917504
-#define CPU_L1IACHE_SIZE 917504
+#define CPU_L3CACHE_SIZE 403701760 // 385MB
+#define CPU_L2CACHE_SIZE 29360128  // 28MB
+#define CPU_L1DCACHE_SIZE 917504   // 896KB
+#define CPU_L1IACHE_SIZE 917504   // 896KB
 #define CACHE_LINE 64 // bytes
 
 // Main Memory size in Giga Bytes

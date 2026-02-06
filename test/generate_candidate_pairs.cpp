@@ -90,7 +90,7 @@ void generate_candidate_pairs(const char *matA_path, const char *output_path, In
     double time = timer.stop();
     
     cout << "C: " << C.num_rows << " x " << C.num_cols << ", nnz: " << C.num_nnzs << endl;
-    cout << "Time: " << time << " ms" << endl;
+    cout << "HashSpGEMMTopK Time: " << time << " ms" << endl;
     
     // Verify basic properties
     bool valid = true;
@@ -119,8 +119,11 @@ void generate_candidate_pairs(const char *matA_path, const char *output_path, In
     // Write matrix C to MTX file
     cout << "\nWriting candidate pairs matrix to: " << output_path << endl;
     
-    // Convert CSR to COO for writing
+    // Convert CSR to COO for writing (timed as part of preprocessing)
+    timer.start();
     COO_Matrix<IndexType, ValueType> coo_C = csr_to_coo(C);
+    double time_csr2coo = timer.stop();
+    cout << "csr_to_coo: " << time_csr2coo << " ms" << endl;
     
     // Prepare arrays for writing (0-based indexing, matching reference GenerateCandidatePairs.cpp)
     int *I = new int[coo_C.num_nnzs];
