@@ -77,7 +77,7 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
     std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = lsh_candidate_pairs<IndexType, ValueType>(
         A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
     double t_lsh_ms = timer.stop();
-    cout << "LSH candidate pairs: " << close_pairs.size() << " (time: " << t_lsh_ms << " ms)" << endl;
+    cout << "LSH candidate pairs: " << close_pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
 
     cout << "Hierarchical clustering (cluster_size=" << cluster_size << ")..." << endl;
     timer.start();
@@ -91,7 +91,10 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
     cout << "Reordering A by cluster..." << endl;
     CSR_Matrix<IndexType, ValueType> A_reordered = csr_reorder_rows<IndexType, ValueType>(A_csr, permutation);
     cout << "Converting A to CSR_VlengthCluster..." << endl;
+    timer.start();
     CSR_VlengthCluster<IndexType, ValueType> A_cluster = csr_to_vlength_cluster<IndexType, ValueType>(A_reordered, offsets);
+    double t_convert_ms = timer.stop();
+    cout << "Format Conversion time: " << t_convert_ms << " ms" << endl;
     delete_host_matrix(A_reordered);
     cout << "A_cluster: " << A_cluster.rows << " clusters, nnzc=" << A_cluster.nnzc << ", nnzv=" << A_cluster.nnzv << endl;
 
