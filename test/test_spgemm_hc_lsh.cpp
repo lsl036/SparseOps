@@ -12,6 +12,7 @@
 #include "../include/sparse_conversion.h"
 #include "../include/spgemm_utility.h"
 #include "../include/spgemm_MinHashLSH.h"
+#include "../include/mmio.h"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
@@ -38,6 +39,7 @@ static void usage(int argc, char **argv) {
     std::cout << "\t  --k            = MinHash signature length (default 64)\n";
     std::cout << "\t  --bands        = LSH bands, k % bands == 0 (default 16)\n";
     std::cout << "\t  --seed         = LSH/MinHash random seed (default 7)\n";
+    std::cout << "\t  --test_type    = correctness|performance (default performance)\n";
 }
 
 template <typename IndexType, typename ValueType>
@@ -74,19 +76,22 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
     cout << "Generating candidate pairs by MinHash+LSH (k=" << k << ", bands=" << num_bands << ", seed=" << seed << ")..." << endl;
     anonymouslib_timer timer;
     timer.start();
-    std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = lsh_candidate_pairs<IndexType, ValueType>(
+    // Map-based API (commented out): slower map allocation and random writes
+    // std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = lsh_candidate_pairs<IndexType, ValueType>(
+    //     A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+    std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
         A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
     double t_lsh_ms = timer.stop();
-    cout << "LSH candidate pairs: " << close_pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
+    cout << "LSH candidate pairs: " << pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
 
     cout << "Hierarchical clustering (cluster_size=" << cluster_size << ")..." << endl;
     timer.start();
-    std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
-        A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
+    // v1: vector-only, path compression, sorted pairs, direct permutation+offsets (no map)
     std::vector<IndexType> permutation, offsets;
-    reordered_dict_to_permutation_and_offsets<IndexType>(reordered_dict, A_csr.num_rows, permutation, offsets);
+    hierarchical_clustering_v1<IndexType, ValueType>(
+        A_csr.row_offset, A_csr.col_index, A_csr.num_rows, pairs, cluster_size, permutation, offsets);
     double t_hc_ms = timer.stop();
-    cout << "Clusters: " << reordered_dict.size() << " (HC time: " << t_hc_ms << " ms)" << endl;
+    cout << "Clusters: " << (offsets.size() > 0 ? offsets.size() - 1 : 0) << " (HC time: " << t_hc_ms << " ms)" << endl;
 
     cout << "Reordering A by cluster..." << endl;
     CSR_Matrix<IndexType, ValueType> A_reordered = csr_reorder_rows<IndexType, ValueType>(A_csr, permutation);
@@ -140,6 +145,123 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
 }
 
 template <typename IndexType, typename ValueType>
+void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path,
+                                    int kernel_flag, bool sortOutput,
+                                    IndexType cluster_size, int k, int num_bands, uint64_t seed)
+{
+    cout << "========================================" << endl;
+    cout << "MinHash+LSH -> Vlength-Cluster SpGEMM Correctness" << endl;
+    cout << "========================================" << endl;
+
+    cout << "Reading A: " << matA_path << endl;
+    CSR_Matrix<IndexType, ValueType> A_csr = read_csr_matrix<IndexType, ValueType>(matA_path);
+    cout << "A: " << A_csr.num_rows << " x " << A_csr.num_cols << ", nnz: " << A_csr.num_nnzs << endl;
+
+    cout << "Reading B: " << matB_path << endl;
+    CSR_Matrix<IndexType, ValueType> B = read_csr_matrix<IndexType, ValueType>(matB_path);
+    cout << "B: " << B.num_rows << " x " << B.num_cols << ", nnz: " << B.num_nnzs << endl;
+
+    if (A_csr.num_cols != B.num_rows) {
+        cerr << "Error: A.cols != B.rows" << endl;
+        delete_host_matrix(A_csr);
+        delete_host_matrix(B);
+        return;
+    }
+
+    if (k <= 0 || num_bands <= 0 || k % num_bands != 0) {
+        cerr << "Error: k must be positive and k % bands == 0. k=" << k << " bands=" << num_bands << endl;
+        delete_host_matrix(A_csr);
+        delete_host_matrix(B);
+        return;
+    }
+
+    cout << "Generating candidate pairs by MinHash+LSH (k=" << k << ", bands=" << num_bands << ", seed=" << seed << ")..." << endl;
+    std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
+        A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+    cout << "LSH candidate pairs: " << pairs.size() << endl;
+
+    cout << "Hierarchical clustering (cluster_size=" << cluster_size << ")..." << endl;
+    std::vector<IndexType> permutation, offsets;
+    hierarchical_clustering_v1<IndexType, ValueType>(
+        A_csr.row_offset, A_csr.col_index, A_csr.num_rows, pairs, cluster_size, permutation, offsets);
+    cout << "Clusters: " << (offsets.size() > 0 ? offsets.size() - 1 : 0) << endl;
+
+    if (static_cast<IndexType>(permutation.size()) != A_csr.num_rows) {
+        cerr << "Error: permutation size != A.num_rows" << endl;
+        delete_host_matrix(A_csr);
+        delete_host_matrix(B);
+        return;
+    }
+
+    cout << "Reordering A by cluster..." << endl;
+    CSR_Matrix<IndexType, ValueType> A_reordered = csr_reorder_rows<IndexType, ValueType>(A_csr, permutation);
+    cout << "Converting A to CSR_VlengthCluster..." << endl;
+    CSR_VlengthCluster<IndexType, ValueType> A_cluster = csr_to_vlength_cluster<IndexType, ValueType>(A_reordered, offsets);
+    cout << "A_cluster: " << A_cluster.rows << " clusters, nnzc=" << A_cluster.nnzc << ", nnzv=" << A_cluster.nnzv << endl;
+
+    cout << "\n--- Kernel " << kernel_flag << " ---" << endl;
+    CSR_VlengthCluster<IndexType, ValueType> C_cluster;
+    anonymouslib_timer timer;
+    timer.start();
+    if (sortOutput)
+        LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+    else
+        LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+    double time_ms = timer.stop();
+    cout << "C_cluster: " << C_cluster.rows << " clusters, nnzc=" << C_cluster.nnzc << endl;
+    cout << "Time: " << time_ms << " ms" << endl;
+    long long int flops = get_spgemm_flop(A_csr, B);
+    cout << "Performance: " << (flops / 1e9) / (time_ms / 1000.0) << " GFLOPS" << endl;
+
+    cout << "Converting C_cluster to CSR (cluster order)..." << endl;
+    CSR_Matrix<IndexType, ValueType> C_csr = vlength_cluster2csr<IndexType, ValueType>(C_cluster);
+    cout << "C_csr: " << C_csr.num_rows << " x " << C_csr.num_cols << ", nnz: " << C_csr.num_nnzs << endl;
+
+    cout << "Restoring C to original row order..." << endl;
+    std::vector<IndexType> inv_perm(A_csr.num_rows);
+    for (IndexType kk = 0; kk < A_csr.num_rows; kk++)
+        inv_perm[permutation[kk]] = kk;
+    CSR_Matrix<IndexType, ValueType> C_original = csr_reorder_rows<IndexType, ValueType>(C_csr, inv_perm);
+
+    std::string base = extractFileNameWithoutExtension(std::string(matA_path));
+    std::string suffix = (kernel_flag == 1) ? "hashvlengthcluster_hc_lsh" : "arrayvlengthcluster_hc_lsh";
+    std::string out_path = base + "_SpOps_" + suffix + ".mtx";
+
+    COO_Matrix<IndexType, ValueType> coo = csr_to_coo(C_original);
+    int *I = new int[coo.num_nnzs];
+    int *J = new int[coo.num_nnzs];
+    double *V = new double[coo.num_nnzs];
+    for (IndexType i = 0; i < coo.num_nnzs; i++) {
+        I[i] = static_cast<int>(coo.row_index[i] + 1);
+        J[i] = static_cast<int>(coo.col_index[i] + 1);
+        V[i] = static_cast<double>(coo.values[i]);
+    }
+    MM_typecode matcode;
+    mm_initialize_typecode(&matcode);
+    mm_set_matrix(&matcode);
+    mm_set_coordinate(&matcode);
+    mm_set_real(&matcode);
+    mm_set_general(&matcode);
+    mm_write_mtx_crd(const_cast<char*>(out_path.c_str()),
+                     static_cast<int>(C_original.num_rows), static_cast<int>(C_original.num_cols),
+                     static_cast<int>(C_original.num_nnzs), I, J, V, matcode);
+    delete[] I;
+    delete[] J;
+    delete[] V;
+
+    delete_host_matrix(C_original);
+    delete_host_matrix(C_csr);
+    delete_host_matrix(coo);
+    delete_vlength_cluster_matrix(C_cluster);
+    delete_vlength_cluster_matrix(A_cluster);
+    delete_host_matrix(A_reordered);
+    delete_host_matrix(A_csr);
+    delete_host_matrix(B);
+    cout << "Result (original row order) written to: " << out_path << endl;
+    cout << "Correctness test done." << endl;
+}
+
+template <typename IndexType, typename ValueType>
 void run_spgemm_hc_lsh_test(int argc, char **argv)
 {
     char *matA = NULL, *matB = NULL;
@@ -187,13 +309,24 @@ void run_spgemm_hc_lsh_test(int argc, char **argv)
     p = get_argval(argc, argv, "seed");
     if (p) seed = static_cast<uint64_t>(atoll(p));
 
+    const char *test_type = "performance";
+    p = get_argval(argc, argv, "test_type");
+    if (p) test_type = p;
+
     cout << "A: " << matA << ", B: " << matB << endl;
-    cout << "LSH: k=" << k << ", bands=" << num_bands << ", seed=" << seed << endl;
-    cout << "kernel: " << kernel_flag << ", cluster_size: " << cluster_size << ", iterations: " << iterations << endl;
+    cout << "test_type: " << test_type << ", LSH: k=" << k << ", bands=" << num_bands << ", seed=" << seed << endl;
+    cout << "kernel: " << kernel_flag << ", cluster_size: " << cluster_size;
+    if (strcmp(test_type, "performance") == 0) cout << ", iterations: " << iterations;
+    cout << endl;
     cout << "threads: " << Le_get_thread_num() << endl;
 
-    test_spgemm_hc_lsh_performance<IndexType, ValueType>(
-        matA, matB, iterations, kernel_flag, sortOutput, cluster_size, k, num_bands, seed);
+    if (strcmp(test_type, "correctness") == 0) {
+        test_spgemm_hc_lsh_correctness<IndexType, ValueType>(
+            matA, matB, kernel_flag, sortOutput, cluster_size, k, num_bands, seed);
+    } else {
+        test_spgemm_hc_lsh_performance<IndexType, ValueType>(
+            matA, matB, iterations, kernel_flag, sortOutput, cluster_size, k, num_bands, seed);
+    }
 }
 
 int main(int argc, char *argv[])

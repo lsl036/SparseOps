@@ -532,6 +532,120 @@ inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
 }
 
 /**
+ * @brief Hierarchical clustering v1: vector-only, no map/set.
+ *        - Full path compression in union-find.
+ *        - Process candidate pairs once, sorted by score descending (no on-the-fly insert/lookup).
+ *        - Output permutation and offsets directly (flat arrays, no map of small vectors).
+ *        PairLike must have .i, .j, .score (e.g. CandidatePair<IndexType, ValueType>).
+ */
+template <typename IndexType, typename ValueType, typename PairLike>
+inline void hierarchical_clustering_v1(
+    const IndexType *rowptr, const IndexType *colids, IndexType num_rows,
+    const std::vector<PairLike> &pairs,
+    IndexType cluster_size,
+    std::vector<IndexType> &permutation_out,
+    std::vector<IndexType> &offsets_out)
+{
+    (void)rowptr;
+    (void)colids;
+    permutation_out.clear();
+    offsets_out.clear();
+
+    std::vector<IndexType> clusters(num_rows);
+    std::vector<IndexType> sz(num_rows);
+    std::vector<int> valid(num_rows, 1);
+    for (IndexType i = 0; i < num_rows; i++) {
+        clusters[i] = i;
+        sz[i] = 1;
+    }
+
+    /* Find with full path compression: return root and set all on path to root. */
+    auto find = [&clusters](IndexType x) -> IndexType {
+        IndexType root = x;
+        while (clusters[root] != root) root = clusters[root];
+        while (clusters[x] != root) {
+            IndexType next = clusters[x];
+            clusters[x] = root;
+            x = next;
+        }
+        return root;
+    };
+
+    /* Sort pairs by score descending (best first); then process in order, no priority queue. */
+    std::vector<std::pair<ValueType, std::pair<IndexType, IndexType>>> sorted_pairs;
+    sorted_pairs.reserve(pairs.size());
+    for (const auto &p : pairs) {
+        IndexType ii = p.i, jj = p.j;
+        if (ii > jj) std::swap(ii, jj);
+        if (ii != jj && ii < num_rows && jj < num_rows)
+            sorted_pairs.push_back(std::make_pair(static_cast<ValueType>(p.score), std::make_pair(ii, jj)));
+    }
+    std::sort(sorted_pairs.begin(), sorted_pairs.end(),
+              [](const std::pair<ValueType, std::pair<IndexType, IndexType>> &a,
+                 const std::pair<ValueType, std::pair<IndexType, IndexType>> &b) { return a.first > b.first; });
+
+    int nclusters = static_cast<int>(num_rows);
+    for (size_t idx = 0; idx < sorted_pairs.size() && nclusters > 0; idx++) {
+        IndexType i = sorted_pairs[idx].second.first;
+        IndexType j = sorted_pairs[idx].second.second;
+        IndexType ri = find(i);
+        IndexType rj = find(j);
+        if (ri == rj) continue;
+        if (!valid[ri] || !valid[rj]) continue;
+        nclusters--;
+        if (sz[ri] < sz[rj]) {
+            clusters[ri] = rj;
+            sz[rj] += sz[ri];
+            if (sz[rj] >= cluster_size) {
+                valid[rj] = 0;
+                nclusters--;
+            }
+        } else {
+            clusters[rj] = ri;
+            sz[ri] += sz[rj];
+            if (sz[ri] >= cluster_size) {
+                valid[ri] = 0;
+                nclusters--;
+            }
+        }
+    }
+
+    /* Build permutation and offsets from union-find result (no map). */
+    std::vector<IndexType> root(num_rows);
+    for (IndexType i = 0; i < num_rows; i++)
+        root[i] = find(i);
+
+    std::vector<IndexType> count(num_rows, 0);
+    for (IndexType i = 0; i < num_rows; i++)
+        count[root[i]]++;
+
+    std::vector<IndexType> sorted_roots;
+    sorted_roots.reserve(static_cast<size_t>(num_rows));
+    for (IndexType r = 0; r < num_rows; r++)
+        if (count[r] > 0) sorted_roots.push_back(r);
+
+    std::vector<IndexType> cluster_id(num_rows, static_cast<IndexType>(-1));
+    for (size_t c = 0; c < sorted_roots.size(); c++)
+        cluster_id[sorted_roots[c]] = static_cast<IndexType>(c);
+
+    offsets_out.resize(sorted_roots.size() + 1);
+    offsets_out[0] = 0;
+    for (size_t c = 0; c < sorted_roots.size(); c++)
+        offsets_out[c + 1] = offsets_out[c] + count[sorted_roots[c]];
+
+    permutation_out.resize(static_cast<size_t>(num_rows));
+    std::vector<IndexType> curr(sorted_roots.size());
+    for (size_t c = 0; c < sorted_roots.size(); c++)
+        curr[c] = offsets_out[c];
+
+    for (IndexType i = 0; i < num_rows; i++) {
+        IndexType r = root[i];
+        IndexType c = cluster_id[r];
+        permutation_out[static_cast<size_t>(curr[c]++)] = i;
+    }
+}
+
+/**
  * @brief Convert reordered_dict (map<root, vector<row indices>>) to permutation and offsets
  *        permutation[new_row] = original row index; offsets = [0, len0, len0+len1, ...].
  */

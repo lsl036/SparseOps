@@ -23,6 +23,12 @@
 #if defined(__AVX512F__)
 #include <immintrin.h>
 #endif
+#if defined(__GNUC__) && !defined(__clang__) && defined(__has_include)
+#if __has_include(<parallel/algorithm>)
+#include <parallel/algorithm>
+#define SPGEMM_LSH_USE_PARALLEL_SORT 1
+#endif
+#endif
 
 // ============================================================================
 // MinHash 签名 (Phase 1)
@@ -218,6 +224,14 @@ inline double minhash_estimated_jaccard(
 // LSH 候选对 (Phase 2)
 // ============================================================================
 
+/** Compact candidate pair for vector-based API: i, j (row indices, i < j), score (e.g. MinHash-est. Jaccard). */
+template <typename IndexType, typename ValueType>
+struct CandidatePair {
+    IndexType i;
+    IndexType j;
+    ValueType score;
+};
+
 namespace lsh_internal {
 
 /** If bucket size exceeds this, use fixed-window sampling instead of full O(n^2) pairs. */
@@ -232,6 +246,16 @@ inline uint64_t band_hash(const uint64_t *band_sig, int r) {
     for (int i = 0; i < r; ++i)
         h = h * mul + band_sig[i];
     return h;
+}
+
+/** Parallel sort when available (GCC parallel mode), else std::sort. */
+template <typename It>
+inline void parallel_sort_pairs(It first, It last) {
+#ifdef SPGEMM_LSH_USE_PARALLEL_SORT
+    __gnu_parallel::sort(first, last);
+#else
+    std::sort(first, last);
+#endif
 }
 
 /** LSH on flat signatures [row-major: row i at sigs + i*k], with parallel band loop and parallel Jaccard fill. */
@@ -321,7 +345,7 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
     }
 #endif
 
-    std::sort(all_pairs.begin(), all_pairs.end());
+    parallel_sort_pairs(all_pairs.begin(), all_pairs.end());
     all_pairs.erase(std::unique(all_pairs.begin(), all_pairs.end()), all_pairs.end());
 
     const size_t np = all_pairs.size();
@@ -339,6 +363,110 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
         out[all_pairs[i]] = est_vals[i];
 
     return out;
+}
+
+/** Vector-based LSH on flat signatures: returns compact array, uses parallel sort, no map. */
+template <typename IndexType, typename ValueType>
+std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_vector(
+    const uint64_t *sigs, size_t num_rows, int k, int num_bands)
+{
+    using pair_t = std::pair<IndexType, IndexType>;
+    std::vector<CandidatePair<IndexType, ValueType>> result;
+    if (!sigs || num_rows == 0 || num_bands <= 0 || k <= 0) return result;
+    const int r = k / num_bands;
+    if (r <= 0 || k != r * num_bands) return result;
+
+    std::vector<pair_t> all_pairs;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        std::vector<pair_t> my_pairs;
+        #pragma omp for schedule(guided)
+        for (int band = 0; band < num_bands; ++band) {
+            std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
+            const int offset = band * r;
+            for (size_t row = 0; row < num_rows; ++row) {
+                const uint64_t *row_sig = sigs + row * static_cast<size_t>(k);
+                uint64_t bh = band_hash(row_sig + offset, r);
+                buckets[bh].push_back(static_cast<IndexType>(row));
+            }
+            for (const auto &kv : buckets) {
+                const std::vector<IndexType> &rows = kv.second;
+                if (rows.size() <= k_bucket_size_limit) {
+                    for (size_t a = 0; a < rows.size(); ++a) {
+                        for (size_t b = a + 1; b < rows.size(); ++b) {
+                            IndexType i = rows[a], j = rows[b];
+                            if (i > j) std::swap(i, j);
+                            my_pairs.push_back(std::make_pair(i, j));
+                        }
+                    }
+                } else {
+                    for (size_t a = 0; a < rows.size(); ++a) {
+                        size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                        if (b_end > rows.size()) b_end = rows.size();
+                        for (size_t b = a + 1; b < b_end; ++b) {
+                            IndexType i = rows[a], j = rows[b];
+                            if (i > j) std::swap(i, j);
+                            my_pairs.push_back(std::make_pair(i, j));
+                        }
+                    }
+                }
+            }
+        }
+        #pragma omp critical
+        all_pairs.insert(all_pairs.end(), my_pairs.begin(), my_pairs.end());
+    }
+#else
+    for (int band = 0; band < num_bands; ++band) {
+        std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
+        const int offset = band * r;
+        for (size_t row = 0; row < num_rows; ++row) {
+            const uint64_t *row_sig = sigs + row * static_cast<size_t>(k);
+            uint64_t bh = band_hash(row_sig + offset, r);
+            buckets[bh].push_back(static_cast<IndexType>(row));
+        }
+        for (const auto &kv : buckets) {
+            const std::vector<IndexType> &rows = kv.second;
+            if (rows.size() <= k_bucket_size_limit) {
+                for (size_t a = 0; a < rows.size(); ++a) {
+                    for (size_t b = a + 1; b < rows.size(); ++b) {
+                        IndexType i = rows[a], j = rows[b];
+                        if (i > j) std::swap(i, j);
+                        all_pairs.push_back(std::make_pair(i, j));
+                    }
+                }
+            } else {
+                for (size_t a = 0; a < rows.size(); ++a) {
+                    size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                    if (b_end > rows.size()) b_end = rows.size();
+                    for (size_t b = a + 1; b < b_end; ++b) {
+                        IndexType i = rows[a], j = rows[b];
+                        if (i > j) std::swap(i, j);
+                        all_pairs.push_back(std::make_pair(i, j));
+                    }
+                }
+            }
+        }
+    }
+#endif
+
+    parallel_sort_pairs(all_pairs.begin(), all_pairs.end());
+    all_pairs.erase(std::unique(all_pairs.begin(), all_pairs.end()), all_pairs.end());
+
+    const size_t np = all_pairs.size();
+    result.resize(np);
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic, 1024)
+#endif
+    for (size_t idx = 0; idx < np; ++idx) {
+        IndexType ii = all_pairs[idx].first, jj = all_pairs[idx].second;
+        result[idx].i = ii;
+        result[idx].j = jj;
+        result[idx].score = static_cast<ValueType>(minhash_estimated_jaccard(
+            sigs + static_cast<size_t>(ii) * static_cast<size_t>(k),
+            sigs + static_cast<size_t>(jj) * static_cast<size_t>(k), k));
+    }
+    return result;
 }
 
 } // namespace lsh_internal
@@ -454,7 +582,7 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
 #endif
 
     // Deduplicate: same (i,j) can appear in multiple bands
-    std::sort(all_pairs.begin(), all_pairs.end());
+    lsh_internal::parallel_sort_pairs(all_pairs.begin(), all_pairs.end());
     all_pairs.erase(std::unique(all_pairs.begin(), all_pairs.end()), all_pairs.end());
 
     const size_t np = all_pairs.size();
@@ -499,6 +627,42 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
         rowptr, col_index, num_rows, k, seed);
     return lsh_internal::lsh_candidate_pairs_from_flat<IndexType, ValueType>(
         sigs.data(), static_cast<size_t>(num_rows), k, num_bands);
+}
+
+// ============================================================================
+// Vector-based API (sequential storage, parallel sort, no map)
+// ============================================================================
+
+/**
+ * @brief LSH candidate pairs from CSR: returns vector of CandidatePair (i, j, score).
+ *        Uses parallel sort when available; no std::map for better cache/memory.
+ */
+template <typename IndexType, typename ValueType>
+std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_vector(
+    const IndexType *rowptr,
+    const IndexType *col_index,
+    IndexType num_rows,
+    int k,
+    int num_bands,
+    uint64_t seed = 12345)
+{
+    std::vector<uint64_t> sigs = minhash_signatures_flat<IndexType>(
+        rowptr, col_index, num_rows, k, seed);
+    return lsh_internal::lsh_candidate_pairs_from_flat_vector<IndexType, ValueType>(
+        sigs.data(), static_cast<size_t>(num_rows), k, num_bands);
+}
+
+/**
+ * @brief Convert vector of CandidatePair to map (i,j) -> score for APIs that need it (e.g. hierarchical_clustering_v0).
+ */
+template <typename IndexType, typename ValueType>
+std::map<std::pair<IndexType, IndexType>, ValueType> candidate_pairs_vector_to_map(
+    const std::vector<CandidatePair<IndexType, ValueType>> &pairs)
+{
+    std::map<std::pair<IndexType, IndexType>, ValueType> out;
+    for (const auto &p : pairs)
+        out[std::make_pair(p.i, p.j)] = p.score;
+    return out;
 }
 
 #endif /* SPGEMM_MINHASH_LSH_H */
