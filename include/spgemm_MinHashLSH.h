@@ -220,6 +220,11 @@ inline double minhash_estimated_jaccard(
 
 namespace lsh_internal {
 
+/** If bucket size exceeds this, use fixed-window sampling instead of full O(n^2) pairs. */
+constexpr size_t k_bucket_size_limit = 256;
+/** When bucket is over limit, each row pairs with at most this many following rows. */
+constexpr int k_window_pairs = 16;
+
 /** Hash a band of r MinHash values to a bucket id. */
 inline uint64_t band_hash(const uint64_t *band_sig, int r) {
     const uint64_t mul = 0x9e3779b97f4a7c15ULL;
@@ -258,11 +263,23 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
 
             for (const auto &kv : buckets) {
                 const std::vector<IndexType> &rows = kv.second;
-                for (size_t a = 0; a < rows.size(); ++a) {
-                    for (size_t b = a + 1; b < rows.size(); ++b) {
-                        IndexType i = rows[a], j = rows[b];
-                        if (i > j) std::swap(i, j);
-                        my_pairs.push_back(std::make_pair(i, j));
+                if (rows.size() <= k_bucket_size_limit) {
+                    for (size_t a = 0; a < rows.size(); ++a) {
+                        for (size_t b = a + 1; b < rows.size(); ++b) {
+                            IndexType i = rows[a], j = rows[b];
+                            if (i > j) std::swap(i, j);
+                            my_pairs.push_back(std::make_pair(i, j));
+                        }
+                    }
+                } else {
+                    for (size_t a = 0; a < rows.size(); ++a) {
+                        size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                        if (b_end > rows.size()) b_end = rows.size();
+                        for (size_t b = a + 1; b < b_end; ++b) {
+                            IndexType i = rows[a], j = rows[b];
+                            if (i > j) std::swap(i, j);
+                            my_pairs.push_back(std::make_pair(i, j));
+                        }
                     }
                 }
             }
@@ -281,11 +298,23 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
         }
         for (const auto &kv : buckets) {
             const std::vector<IndexType> &rows = kv.second;
-            for (size_t a = 0; a < rows.size(); ++a) {
-                for (size_t b = a + 1; b < rows.size(); ++b) {
-                    IndexType i = rows[a], j = rows[b];
-                    if (i > j) std::swap(i, j);
-                    all_pairs.push_back(std::make_pair(i, j));
+            if (rows.size() <= k_bucket_size_limit) {
+                for (size_t a = 0; a < rows.size(); ++a) {
+                    for (size_t b = a + 1; b < rows.size(); ++b) {
+                        IndexType i = rows[a], j = rows[b];
+                        if (i > j) std::swap(i, j);
+                        all_pairs.push_back(std::make_pair(i, j));
+                    }
+                }
+            } else {
+                for (size_t a = 0; a < rows.size(); ++a) {
+                    size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                    if (b_end > rows.size()) b_end = rows.size();
+                    for (size_t b = a + 1; b < b_end; ++b) {
+                        IndexType i = rows[a], j = rows[b];
+                        if (i > j) std::swap(i, j);
+                        all_pairs.push_back(std::make_pair(i, j));
+                    }
                 }
             }
         }
@@ -363,11 +392,23 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
 
             for (const auto &kv : buckets) {
                 const std::vector<IndexType> &rows = kv.second;
-                for (size_t a = 0; a < rows.size(); ++a) {
-                    for (size_t b = a + 1; b < rows.size(); ++b) {
-                        IndexType i = rows[a], j = rows[b];
-                        if (i > j) std::swap(i, j);
-                        my_pairs.push_back(std::make_pair(i, j));
+                if (rows.size() <= k_bucket_size_limit) {
+                    for (size_t a = 0; a < rows.size(); ++a) {
+                        for (size_t b = a + 1; b < rows.size(); ++b) {
+                            IndexType i = rows[a], j = rows[b];
+                            if (i > j) std::swap(i, j);
+                            my_pairs.push_back(std::make_pair(i, j));
+                        }
+                    }
+                } else {
+                    for (size_t a = 0; a < rows.size(); ++a) {
+                        size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                        if (b_end > rows.size()) b_end = rows.size();
+                        for (size_t b = a + 1; b < b_end; ++b) {
+                            IndexType i = rows[a], j = rows[b];
+                            if (i > j) std::swap(i, j);
+                            my_pairs.push_back(std::make_pair(i, j));
+                        }
                     }
                 }
             }
@@ -389,11 +430,23 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
 
         for (const auto &kv : buckets) {
             const std::vector<IndexType> &rows = kv.second;
-            for (size_t a = 0; a < rows.size(); ++a) {
-                for (size_t b = a + 1; b < rows.size(); ++b) {
-                    IndexType i = rows[a], j = rows[b];
-                    if (i > j) std::swap(i, j);
-                    all_pairs.push_back(std::make_pair(i, j));
+            if (rows.size() <= k_bucket_size_limit) {
+                for (size_t a = 0; a < rows.size(); ++a) {
+                    for (size_t b = a + 1; b < rows.size(); ++b) {
+                        IndexType i = rows[a], j = rows[b];
+                        if (i > j) std::swap(i, j);
+                        all_pairs.push_back(std::make_pair(i, j));
+                    }
+                }
+            } else {
+                for (size_t a = 0; a < rows.size(); ++a) {
+                    size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                    if (b_end > rows.size()) b_end = rows.size();
+                    for (size_t b = a + 1; b < b_end; ++b) {
+                        IndexType i = rows[a], j = rows[b];
+                        if (i > j) std::swap(i, j);
+                        all_pairs.push_back(std::make_pair(i, j));
+                    }
                 }
             }
         }
