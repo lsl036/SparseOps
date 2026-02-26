@@ -69,31 +69,31 @@ def parse_run_output(text: str):
     return out
 
 
-def run_one(binary, mtx_path, k, bands, extra_args):
-    """Run test_spgemm_hc_lsh once. Returns (parsed_times_dict, stderr_or_empty)."""
+def run_one(binary, mtx_path, k, bands, extra_args, timeout_sec):
+    """Run test_spgemm_hc_lsh once. Returns (parsed_times_dict, error_msg). timeout_sec=None means no limit."""
     cmd = [
         binary,
         mtx_path,
         mtx_path,
-        f"--k={k}",
-        f"--bands={bands}",
+        "--k=%d" % k,
+        "--bands=%d" % bands,
         *extra_args,
     ]
+    kwargs = {"capture_output": True, "text": True}
+    if timeout_sec is not None:
+        kwargs["timeout"] = timeout_sec
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
+        result = subprocess.run(cmd, **kwargs)
         stdout = result.stdout or ""
         stderr = result.stderr or ""
         if result.returncode != 0:
-            return None, stderr.strip() or f"exit code {result.returncode}"
+            return None, stderr.strip() or ("exit code %d" % result.returncode)
         parsed = parse_run_output(stdout)
-        return parsed, stderr.strip()
+        if parsed is None:
+            return None, "parse_failed"
+        return parsed, ""
     except subprocess.TimeoutExpired:
-        return None, "timeout"
+        return None, "timeout(%ds)" % (timeout_sec or 0)
     except Exception as e:
         return None, str(e)
 
@@ -133,6 +133,13 @@ def main():
         default="",
         help="Extra args passed to binary (e.g. --iterations=5 --cluster_size=8)",
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        metavar="SEC",
+        help="Max run time per (dataset, k, bands) in seconds; 0 = no limit (default: 600)",
+    )
     args = parser.parse_args()
 
     base_dir = args.base_dir.rstrip("/")
@@ -165,6 +172,12 @@ def main():
     extra_args = args.extra.split() if args.extra else []
     k_bands_list = list(k_bands_candidates())
 
+    timeout_sec = args.timeout if args.timeout > 0 else None  # None = no limit
+    if timeout_sec is not None:
+        print("Per-run timeout: %d s (use --timeout 0 for no limit)" % timeout_sec, file=sys.stderr)
+    else:
+        print("Per-run timeout: none", file=sys.stderr)
+
     fieldnames = [
         "mtxname",
         "k",
@@ -174,20 +187,32 @@ def main():
         "HC_time",
         "Format_Conversion_time",
         "LeSpGEMM_VLength_time",
+        "error",
     ]
 
     rows = []
     for name in datasets:
         mtx_path = get_matrix_path(base_dir, name)
         if not os.path.isfile(mtx_path):
-            print(f"Skip (file not found): {mtx_path}", file=sys.stderr)
+            print("Skip (file not found): %s" % mtx_path, file=sys.stderr)
+            rows.append({
+                "mtxname": name,
+                "k": "",
+                "bands": "",
+                "r": "",
+                "genPairs_time": "",
+                "HC_time": "",
+                "Format_Conversion_time": "",
+                "LeSpGEMM_VLength_time": "",
+                "error": "file_not_found",
+            })
             continue
         for k, bands in k_bands_list:
             r = k // bands
-            print(f"Run {name} k={k} bands={bands} r={r} ...", flush=True)
-            parsed, err = run_one(binary, mtx_path, k, bands, extra_args)
+            print("Run %s k=%d bands=%d r=%d ..." % (name, k, bands, r), flush=True)
+            parsed, err = run_one(binary, mtx_path, k, bands, extra_args, timeout_sec)
             if parsed is None:
-                print(f"  FAIL: {err}", file=sys.stderr)
+                print("  FAIL: %s" % err, file=sys.stderr)
                 rows.append({
                     "mtxname": name,
                     "k": k,
@@ -197,7 +222,7 @@ def main():
                     "HC_time": "",
                     "Format_Conversion_time": "",
                     "LeSpGEMM_VLength_time": "",
-                    "_error": err,
+                    "error": err,
                 })
             else:
                 rows.append({
@@ -209,16 +234,20 @@ def main():
                     "HC_time": parsed["HC_time"],
                     "Format_Conversion_time": parsed["Format_Conversion_time"],
                     "LeSpGEMM_VLength_time": parsed["LeSpGEMM_VLength_time"],
+                    "error": "",
                 })
-                print(f"  genPairs={parsed['genPairs_time']:.2f} HC={parsed['HC_time']:.2f} "
-                      f"Convert={parsed['Format_Conversion_time']:.2f} SpGEMM={parsed['LeSpGEMM_VLength_time']:.2f} ms")
+                print("  genPairs=%.2f HC=%.2f Convert=%.2f SpGEMM=%.2f ms" % (
+                    parsed["genPairs_time"], parsed["HC_time"],
+                    parsed["Format_Conversion_time"], parsed["LeSpGEMM_VLength_time"]))
 
     out_path = args.output
     with open(out_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    print(f"Wrote {len(rows)} rows to {out_path}")
+    n_ok = sum(1 for r in rows if r.get("error") == "" and r.get("genPairs_time") != "")
+    print("Wrote %d rows to %s (%d with results, %d failed/skipped)" % (
+        len(rows), out_path, n_ok, len(rows) - n_ok))
 
 
 if __name__ == "__main__":
