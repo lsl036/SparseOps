@@ -184,6 +184,7 @@ inline double minhash_estimated_jaccard(const uint64_t *sig_a, const uint64_t *s
     if (k <= 0) return 0.0;
     int match = 0;
 #if defined(__AVX512F__)
+    // std::cout << "using AVX512 for minhash_estimated_jaccard" << std::endl;
     int d = 0;
     for (; d + 8 <= k; d += 8) {
         __m512i va = _mm512_loadu_epi64(sig_a + d);
@@ -194,6 +195,8 @@ inline double minhash_estimated_jaccard(const uint64_t *sig_a, const uint64_t *s
     for (; d < k; ++d)
         if (sig_a[d] == sig_b[d]) ++match;
 #else
+    #pragma omp simd
+    // std::cout << "using SIMD for minhash_estimated_jaccard" << std::endl;
     for (int d = 0; d < k; ++d)
         if (sig_a[d] == sig_b[d]) ++match;
 #endif

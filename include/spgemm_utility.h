@@ -460,11 +460,16 @@ inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
     IndexType cluster_size)
 {
     using item_t = std::pair<ValueType, std::pair<IndexType, IndexType>>;
-    auto cmp = [](const item_t &a, const item_t &b) { return a.first < b.first; };
+    /* Same comparator as v1: max by score, tie-break by (i,j) for deterministic merge order. */
+    auto cmp = [](const item_t &a, const item_t &b) {
+        return a.first < b.first || (a.first == b.first && a.second < b.second);
+    };
     std::priority_queue<item_t, std::vector<item_t>, decltype(cmp)> sims(cmp);
 
     for (const auto &p : close_pairs) {
-        sims.push(std::make_pair(p.second, p.first));
+        IndexType ii = p.first.first, jj = p.first.second;
+        if (ii > jj) std::swap(ii, jj);
+        sims.push(std::make_pair(p.second, std::make_pair(ii, jj)));
     }
 
     std::vector<IndexType> clusters(num_rows);
@@ -512,9 +517,10 @@ inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
             }
             if (!valid[i] || !valid[j]) continue;
             if (i != j) {
-                auto p = std::make_pair(i, j);
+                IndexType pi = (i < j) ? i : j, pj = (i < j) ? j : i;
+                auto p = std::make_pair(pi, pj);
                 if (close_pairs.find(p) == close_pairs.end()) {
-                    ValueType s_val = static_cast<ValueType>(jaccard_similarity<IndexType, ValueType>(rowptr, colids, i, j));
+                    ValueType s_val = static_cast<ValueType>(jaccard_similarity<IndexType, ValueType>(rowptr, colids, pi, pj));
                     sims.push(std::make_pair(s_val, p));
                     close_pairs[p] = s_val;
                 }
@@ -532,10 +538,10 @@ inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
 }
 
 /**
- * @brief Hierarchical clustering v1: vector-only, no map/set.
+ * @brief Hierarchical clustering v1: no map; uses set for seen pairs and priority queue.
  *        - Full path compression in union-find.
- *        - Process candidate pairs once, sorted by score descending (no on-the-fly insert/lookup).
- *        - Output permutation and offsets directly (flat arrays, no map of small vectors).
+ *        - Priority queue by score; when merging, may discover new root pairs and push with exact Jaccard (no map).
+ *        - Output permutation and offsets directly (flat arrays).
  *        PairLike must have .i, .j, .score (e.g. CandidatePair<IndexType, ValueType>).
  */
 template <typename IndexType, typename ValueType, typename PairLike>
@@ -546,8 +552,6 @@ inline void hierarchical_clustering_v1(
     std::vector<IndexType> &permutation_out,
     std::vector<IndexType> &offsets_out)
 {
-    (void)rowptr;
-    (void)colids;
     permutation_out.clear();
     offsets_out.clear();
 
@@ -571,41 +575,63 @@ inline void hierarchical_clustering_v1(
         return root;
     };
 
-    /* Sort pairs by score descending (best first); then process in order, no priority queue. */
-    std::vector<std::pair<ValueType, std::pair<IndexType, IndexType>>> sorted_pairs;
-    sorted_pairs.reserve(pairs.size());
+    using item_t = std::pair<ValueType, std::pair<IndexType, IndexType>>;
+    /* Same comparator as v0: max by score, tie-break by (i,j) for same merge order. */
+    auto cmp = [](const item_t &a, const item_t &b) {
+        return a.first < b.first || (a.first == b.first && a.second < b.second);
+    };
+    std::priority_queue<item_t, std::vector<item_t>, decltype(cmp)> sims(cmp);
+    std::set<std::pair<IndexType, IndexType>> seen;
+
     for (const auto &p : pairs) {
         IndexType ii = p.i, jj = p.j;
         if (ii > jj) std::swap(ii, jj);
-        if (ii != jj && ii < num_rows && jj < num_rows)
-            sorted_pairs.push_back(std::make_pair(static_cast<ValueType>(p.score), std::make_pair(ii, jj)));
+        if (ii == jj || ii >= num_rows || jj >= num_rows) continue;
+        auto key = std::make_pair(ii, jj);
+        if (seen.find(key) != seen.end()) continue;
+        seen.insert(key);
+        sims.push(std::make_pair(static_cast<ValueType>(p.score), key));
     }
-    std::sort(sorted_pairs.begin(), sorted_pairs.end(),
-              [](const std::pair<ValueType, std::pair<IndexType, IndexType>> &a,
-                 const std::pair<ValueType, std::pair<IndexType, IndexType>> &b) { return a.first > b.first; });
 
     int nclusters = static_cast<int>(num_rows);
-    for (size_t idx = 0; idx < sorted_pairs.size() && nclusters > 0; idx++) {
-        IndexType i = sorted_pairs[idx].second.first;
-        IndexType j = sorted_pairs[idx].second.second;
+    while (!sims.empty() && nclusters > 0) {
+        item_t top = sims.top();
+        sims.pop();
+        IndexType i = top.second.first;
+        IndexType j = top.second.second;
+        if (i >= num_rows || j >= num_rows) continue;
         IndexType ri = find(i);
         IndexType rj = find(j);
         if (ri == rj) continue;
         if (!valid[ri] || !valid[rj]) continue;
-        nclusters--;
-        if (sz[ri] < sz[rj]) {
-            clusters[ri] = rj;
-            sz[rj] += sz[ri];
-            if (sz[rj] >= cluster_size) {
-                valid[rj] = 0;
-                nclusters--;
+
+        if (clusters[i] == i && clusters[j] == j) {
+            /* Both are roots: merge. */
+            nclusters--;
+            if (sz[ri] < sz[rj]) {
+                clusters[ri] = rj;
+                sz[rj] += sz[ri];
+                if (sz[rj] >= cluster_size) {
+                    valid[rj] = 0;
+                    nclusters--;
+                }
+            } else {
+                clusters[rj] = ri;
+                sz[ri] += sz[rj];
+                if (sz[ri] >= cluster_size) {
+                    valid[ri] = 0;
+                    nclusters--;
+                }
             }
         } else {
-            clusters[rj] = ri;
-            sz[ri] += sz[rj];
-            if (sz[ri] >= cluster_size) {
-                valid[ri] = 0;
-                nclusters--;
+            /* Discovered (ri, rj) when at least one of i,j was already merged; add if not seen. */
+            IndexType pi = (ri < rj) ? ri : rj;
+            IndexType pj = (ri < rj) ? rj : ri;
+            auto key = std::make_pair(pi, pj);
+            if (seen.find(key) == seen.end()) {
+                seen.insert(key);
+                ValueType s_val = static_cast<ValueType>(jaccard_similarity<IndexType, ValueType>(rowptr, colids, pi, pj));
+                sims.push(std::make_pair(s_val, key));
             }
         }
     }
