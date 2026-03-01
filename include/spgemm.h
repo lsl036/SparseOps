@@ -196,6 +196,25 @@ void LeSpGEMM_hash_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_clu
                            CSR_VlengthCluster<IndexType, ValueType> &C_cluster);
 
 /**
+ * @brief Mixed-accumulator Variable-length Cluster-wise SpGEMM.
+ *        For each cluster, automatically selects hash or dense (offset-based)
+ *        accumulator based on B-row L2-residency and C-column density.
+ *        Dense path avoids hash probing overhead when C columns are compact;
+ *        hash path handles sparse/scattered clusters as usual.
+ *
+ * @tparam sortOutput Whether to sort output columns (template parameter)
+ * @tparam IndexType
+ * @tparam ValueType
+ * @param A_cluster Input matrix A in CSR_VlengthCluster format
+ * @param B Input matrix B in CSR_Matrix format
+ * @param C_cluster Output matrix C in CSR_VlengthCluster format (will be allocated)
+ */
+template <bool sortOutput = true, typename IndexType, typename ValueType>
+void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
+                        const CSR_Matrix<IndexType, ValueType> &B,
+                        CSR_VlengthCluster<IndexType, ValueType> &C_cluster);
+
+/**
  * @brief HashSpGEMMTopK: Compute A * AT with binary pattern and keep top-k similarities per row
  *        Used for generating candidate pairs in hierarchical clustering
  *        - Converts A to binary pattern (all non-zero values set to 1.0)

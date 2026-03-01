@@ -130,6 +130,9 @@ struct CSR_VlengthCluster : public Matrix_Features<IndexType>
                              // Values for column j in cluster i:
                              //   values[rowptr_val[i] + (j - rowptr[i]) * cluster_sz[i] + k]
                              // where k is the row index within the cluster (0 <= k < cluster_sz[i])
+    char *acc_flag = NULL;          // Optional: hash(0) vs dense(1) per cluster for mixed-accumulator kernel (length: rows); NULL if unused
+    IndexType *min_ccol = NULL;     // Optional: min column index per cluster for mixed-accumulator kernel (length: rows); NULL if unused
+    IndexType *max_ccol = NULL;     // Optional: max column index per cluster for mixed-accumulator kernel (length: rows); NULL if unused
 };
 
 /**
@@ -147,6 +150,7 @@ void delete_vlength_cluster_matrix(CSR_VlengthCluster<IndexType, ValueType> &clu
     delete_array(cluster.colids);
     delete_array(cluster.rowptr_val);
     delete_array(cluster.values);
+    // delete_array(cluster.acc_flag);
     
     // Reset fields
     cluster.csr_rows = 0;

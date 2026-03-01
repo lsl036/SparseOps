@@ -33,7 +33,7 @@ static void usage(int argc, char **argv) {
     std::cout << "\t  --precision     = 32|64 (default 64)\n";
     std::cout << "\t  --threads      = number of OMP threads\n";
     std::cout << "\t  --iterations   = iterations for performance (default 10)\n";
-    std::cout << "\t  --kernel       = 1 (Hash VLength) or 2 (Array VLength, default 1)\n";
+    std::cout << "\t  --kernel       = 1 (Hash VLength), 2 (Array VLength), or 3 (Mixed-accumulator, default 1)\n";
     std::cout << "\t  --cluster_size = max cluster size (default 8)\n";
     std::cout << "\t  --sort         = 0|1 (sort output columns, default 0)\n";
     std::cout << "\t  --k            = MinHash signature length (default 64)\n";
@@ -130,6 +130,12 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
     cout << "Kernel: " << kernel_flag << endl;
 
     CSR_VlengthCluster<IndexType, ValueType> C_cluster;
+    // C_cluster.acc_flag = nullptr;
+    if (kernel_flag == 3) {
+        C_cluster.acc_flag = new_array<char>(A_cluster.rows);
+        C_cluster.min_ccol = new_array<IndexType>(A_cluster.rows);
+        C_cluster.max_ccol = new_array<IndexType>(A_cluster.rows);
+    }
     if (sortOutput)
         LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     else
@@ -163,6 +169,11 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
     delete_vlength_cluster_matrix(A_cluster);
     delete_host_matrix(A_csr);
     delete_host_matrix(B);
+    if (kernel_flag == 3) {
+        delete_array(C_cluster.acc_flag);
+        delete_array(C_cluster.min_ccol);
+        delete_array(C_cluster.max_ccol);
+    }
     cout << "Performance test done." << endl;
 }
 
@@ -242,6 +253,12 @@ void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path
 
     cout << "\n--- Kernel " << kernel_flag << " ---" << endl;
     CSR_VlengthCluster<IndexType, ValueType> C_cluster;
+    C_cluster.acc_flag = nullptr;
+    if (kernel_flag == 3) {
+        C_cluster.acc_flag = new_array<char>(A_cluster.rows);
+        C_cluster.min_ccol = new_array<IndexType>(A_cluster.rows);
+        C_cluster.max_ccol = new_array<IndexType>(A_cluster.rows);
+    }
     anonymouslib_timer timer;
     timer.start();
     if (sortOutput)
@@ -265,7 +282,7 @@ void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path
     CSR_Matrix<IndexType, ValueType> C_original = csr_reorder_rows<IndexType, ValueType>(C_csr, inv_perm);
 
     std::string base = extractFileNameWithoutExtension(std::string(matA_path));
-    std::string suffix = (kernel_flag == 1) ? "hashvlengthcluster_hc_lsh" : "arrayvlengthcluster_hc_lsh";
+    std::string suffix = (kernel_flag == 1) ? "hashvlengthcluster_hc_lsh" : (kernel_flag == 2) ? "arrayvlengthcluster_hc_lsh" : "mixedvlengthcluster_hc_lsh";
     std::string out_path = base + "_SpOps_" + suffix + ".mtx";
 
     COO_Matrix<IndexType, ValueType> coo = csr_to_coo(C_original);
@@ -298,6 +315,11 @@ void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path
     delete_host_matrix(A_reordered);
     delete_host_matrix(A_csr);
     delete_host_matrix(B);
+    if (kernel_flag == 3) {
+        delete_array(C_cluster.acc_flag);
+        delete_array(C_cluster.min_ccol);
+        delete_array(C_cluster.max_ccol);
+    }
     cout << "Result (original row order) written to: " << out_path << endl;
     cout << "Correctness test done." << endl;
 }
@@ -327,7 +349,7 @@ void run_spgemm_hc_lsh_test(int argc, char **argv)
     p = get_argval(argc, argv, "kernel");
     if (p) {
         kernel_flag = atoi(p);
-        if (kernel_flag != 1 && kernel_flag != 2) kernel_flag = 1;
+        if (kernel_flag != 1 && kernel_flag != 2 && kernel_flag != 3) kernel_flag = 1;
     }
 
     IndexType cluster_size = 8;

@@ -22,11 +22,11 @@ from collections import defaultdict
 # Matrix names array for easy extension
 MATRIX_NAMES = [
     'bcspwr10',
-    'bcsstk32',
+    # 'bcsstk32',
     'skirt_id_764',
     '2cubes_sphere',
-    'cant'
-    # 'poisson3Da'
+    # 'cant'
+    'poisson3Da'
     # Add more matrix names here in the future
 ]
 
@@ -177,11 +177,15 @@ def parse_kernel_arg(kernel_arg):
         return "hashvlengthcluster_hc_lsh"
     elif kernel_arg == "2":
         return "arrayvlengthcluster_hc_lsh"
+    elif kernel_arg == "3":
+        return "mixedvlengthcluster_hc_lsh"
     # Support string values
     elif kernel_arg == "hashvlengthcluster_hc_lsh" or kernel_arg == "hashvlength":
         return "hashvlengthcluster_hc_lsh"
     elif kernel_arg == "arrayvlengthcluster_hc_lsh" or kernel_arg == "arrayvlength":
         return "arrayvlengthcluster_hc_lsh"
+    elif kernel_arg == "mixedvlengthcluster_hc_lsh" or kernel_arg == "mixed_acc":
+        return "mixedvlengthcluster_hc_lsh"
     else:
         print(f"Warning: Unknown kernel argument '{kernel_arg}', defaulting to hashvlengthcluster_hc_lsh")
         return "hashvlengthcluster_hc_lsh"
@@ -193,6 +197,8 @@ def get_kernel_display_name(suffix):
         return "Hash-based variable-length cluster"
     elif suffix == "arrayvlengthcluster_hc_lsh":
         return "Array-based variable-length cluster"
+    elif suffix == "mixedvlengthcluster_hc_lsh":
+        return "Mixed-accumulator variable-length cluster"
     else:
         return f"Unknown ({suffix})"
 

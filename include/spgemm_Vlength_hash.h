@@ -90,4 +90,55 @@ void spgemm_Vlength_hash_numeric_omp_lb(
     SpGEMM_BIN_VlengthCluster<IndexType, ValueType> *bin,
     IndexType cnnz, const IndexType *cluster_sz, const ValueType eps = 1e-12f);
 
+/**
+ * @brief After calculating on each hash table, sort them in ascending order if necessary,
+ *        and then store them as output matrix in variable-length cluster format.
+ *        Shared by hash and mixed accumulator kernels.
+ */
+template <bool sortOutput, typename IndexType, typename ValueType>
+inline void sort_and_store_table2mat_vlcluster(IndexType *ht_check, ValueType *ht_value,
+                                               IndexType *colids, ValueType *values,
+                                               IndexType nz, IndexType ht_size,
+                                               IndexType cluster_sz,
+                                               const ValueType eps = static_cast<ValueType>(1e-12))
+{
+    IndexType index = 0;
+    IndexType val_idx, ht_idx;
+    if (sortOutput) {
+        std::vector<std::pair<IndexType, IndexType>> p_vec;
+        p_vec.reserve(nz);
+        for (IndexType j = 0; j < ht_size; ++j) {
+            if (ht_check[j] != -1) {
+                ht_idx = j * cluster_sz;
+                bool all_zero = true;
+                for (IndexType l = 0; l < cluster_sz; l++) {
+                    if (std::abs(ht_value[ht_idx + l]) >= eps) { all_zero = false; break; }
+                }
+                if (!all_zero)
+                    p_vec.push_back(std::make_pair(ht_check[j], j));
+            }
+        }
+        std::sort(p_vec.begin(), p_vec.end(),
+                  [](const std::pair<IndexType, IndexType> &a, const std::pair<IndexType, IndexType> &b) { return a.first < b.first; });
+        for (IndexType j = 0; j < static_cast<IndexType>(p_vec.size()); ++j) {
+            colids[j] = p_vec[j].first;
+            val_idx = j * cluster_sz;
+            ht_idx = p_vec[j].second * cluster_sz;
+            for (IndexType l = 0; l < cluster_sz; l++)
+                values[val_idx + l] = ht_value[ht_idx + l];
+        }
+    } else {
+        for (IndexType j = 0; j < ht_size; ++j) {
+            if (ht_check[j] != -1) {
+                ht_idx = j * cluster_sz;
+                colids[index] = ht_check[j];
+                val_idx = index * cluster_sz;
+                for (IndexType l = 0; l < cluster_sz; l++)
+                    values[val_idx + l] = ht_value[ht_idx + l];
+                index++;
+            }
+        }
+    }
+}
+
 #endif /* SPGEMM_VLENGTH_HASH_H */

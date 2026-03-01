@@ -1650,6 +1650,7 @@ CSR_VlengthCluster<IndexType, ValueType> csr_to_vlength_cluster(
     cluster.nnzc = 0;
     cluster.nnzv = 0;
     cluster.max_cluster_sz = 256;  // Default, will be updated
+    cluster.acc_flag = nullptr;
     
     // Number of clusters = offsets.size() - 1
     if (offsets.size() < 2) {

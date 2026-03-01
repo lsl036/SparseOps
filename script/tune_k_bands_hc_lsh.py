@@ -15,6 +15,9 @@ Usage:
 
   # Optional: fewer iterations per run
   python3 script/tune_k_bands_hc_lsh.py pdb1HYS --extra "--iterations=5"
+
+  # Use mixed-accumulator kernel (kernel=3)
+  python3 script/tune_k_bands_hc_lsh.py pdb1HYS --extra "--kernel=3"
 """
 
 from __future__ import print_function
@@ -130,8 +133,10 @@ def main():
     )
     parser.add_argument(
         "--extra",
+        nargs="?",
         default="",
-        help="Extra args passed to binary (e.g. --iterations=5 --cluster_size=8)",
+        metavar="ARGS",
+        help="Extra args passed to binary (e.g. '--kernel=3' or '--iterations=5 --cluster_size=8'). Use --extra='--kernel=3' if shell strips quotes.",
     )
     parser.add_argument(
         "--timeout",
