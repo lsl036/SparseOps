@@ -595,6 +595,9 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
         C_cluster.min_ccol, C_cluster.max_ccol, C_cluster.rows,
         B_rowdense, L2_budget, MIXED_DENSITY_THRESHOLD, C_cluster.acc_flag);
 
+    bin->create_tls_dense_buffers_for_dense_threads(
+        C_cluster.acc_flag, C_cluster.min_ccol, C_cluster.max_ccol, C_cluster.cluster_sz);
+
     // std::cout << "[mixed_acc] dense clusters: " << dense_count
     //           << " / " << C_cluster.rows
     //           << " (" << (100.0 * dense_count / C_cluster.rows) << "%)"

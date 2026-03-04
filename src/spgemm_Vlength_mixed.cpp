@@ -200,24 +200,7 @@ void spgemm_mixed_numeric_omp_lb(
 
         IndexType *ht_check = bin->local_hash_table_id[tid];
         ValueType *ht_value = bin->local_hash_table_val[tid];
-
-        IndexType max_dense_range = 0;
-        for (IndexType ci = start_cluster; ci < end_cluster; ++ci) {
-            if (acc_flag[ci] == 1 && bin->cluster_nz[ci] > 0) {
-                IndexType cr = max_ccol[ci] - min_ccol[ci] + 1;
-                if (cr > max_dense_range) max_dense_range = cr;
-            }
-        }
-        IndexType max_csz = 0;
-        for (IndexType ci = start_cluster; ci < end_cluster; ++ci) {
-            if (acc_flag[ci] == 1 && cluster_sz[ci] > max_csz)
-                max_csz = cluster_sz[ci];
-        }
-
-        ValueType *dense_buf = nullptr;
-        if (max_dense_range > 0 && max_csz > 0) {
-            dense_buf = new_array<ValueType>(static_cast<size_t>(max_dense_range) * max_csz);
-        }
+        ValueType *dense_buf = (bin->local_dense_buf && bin->local_dense_buf[tid]) ? bin->local_dense_buf[tid] : nullptr;
 
         IndexType t_acol;
         ValueType t_aval, t_val;
@@ -301,8 +284,6 @@ void spgemm_mixed_numeric_omp_lb(
                     (crpt[cluster_id + 1] - offset), ht_size, csz, eps);
             }
         }
-
-        if (dense_buf) delete_array(dense_buf);
     }
 }
 

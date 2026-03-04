@@ -291,6 +291,8 @@ public:
     // Thread-local hash tables (for cluster-wise accumulation)
     IndexType **local_hash_table_id;  // [thread_id][hash_size]
     ValueType **local_hash_table_val; // [thread_id][hash_size * max_cluster_sz]
+    // TLS dense buffer for mixed-accumulator: only allocated for threads that have acc_flag=1 clusters
+    ValueType **local_dense_buf;     // [thread_id], nullptr if thread has no dense clusters
     int allocated_thread_num;          // number of threads for which memory was allocated
     int64_t total_intprod;           // total intermediate products (for load balancing)
     size_t total_size;               // total memory size in bytes (matching reference implementation)
@@ -351,6 +353,16 @@ public:
      * @param max_cols Maximum number of columns expected per thread
      */
     void create_local_hash_table(IndexType max_cols);
+
+    /**
+     * @brief Create TLS dense buffers only for threads that have at least one dense cluster (acc_flag=1).
+     *        Each such thread gets a buffer of size (max col_range in its range) * (max cluster_sz in its range).
+     *        Threads with no dense clusters get nullptr (hash-only threads do not use dense buffer).
+     */
+    void create_tls_dense_buffers_for_dense_threads(
+        const char *acc_flag,
+        const IndexType *min_ccol, const IndexType *max_ccol,
+        const IndexType *cluster_sz);
     
     /**
      * @brief Calculate memory size in bytes (matching reference implementation)

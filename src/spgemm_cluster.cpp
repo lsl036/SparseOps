@@ -261,7 +261,7 @@ SpGEMM_BIN_VlengthCluster<IndexType, ValueType>::SpGEMM_BIN_VlengthCluster()
     : num_clusters(0), cluster_sz(nullptr), min_ht_size(0), max_bin_id(0),
       allocated_thread_num(Le_get_thread_num()), total_intprod(0), total_size(0),
       bin_id_cluster(nullptr), cluster_nz(nullptr), clusters_offset(nullptr),
-      local_hash_table_id(nullptr), local_hash_table_val(nullptr)
+      local_hash_table_id(nullptr), local_hash_table_val(nullptr), local_dense_buf(nullptr)
 {
 }
 
@@ -287,6 +287,8 @@ SpGEMM_BIN_VlengthCluster<IndexType, ValueType>::SpGEMM_BIN_VlengthCluster(
     for (int i = 0; i < allocated_thread_num; ++i) {
         local_hash_table_id[i] = nullptr;
     }
+
+    local_dense_buf = nullptr;
     
     // Calculate initial total_size (matching reference implementation)
     // total_size += (num_clusters * sizeof(IndexType));             // cluster_sz
@@ -315,6 +317,15 @@ SpGEMM_BIN_VlengthCluster<IndexType, ValueType>::~SpGEMM_BIN_VlengthCluster()
         }
         delete[] local_hash_table_id;
         delete[] local_hash_table_val;
+    }
+
+    if (local_dense_buf != nullptr) {
+        for (int t = 0; t < allocated_thread_num; ++t) {
+            if (local_dense_buf[t] != nullptr) {
+                delete_array(local_dense_buf[t]);
+            }
+        }
+        delete[] local_dense_buf;
     }
 }
 
@@ -490,6 +501,39 @@ void SpGEMM_BIN_VlengthCluster<IndexType, ValueType>::create_local_hash_table(In
         // total_size += (ht_size * sizeof(IndexType));                   // local_hash_table_id
         // #pragma omp atomic
         // total_size += (ht_val_size * sizeof(ValueType));               // local_hash_table_val
+    }
+}
+
+template <typename IndexType, typename ValueType>
+void SpGEMM_BIN_VlengthCluster<IndexType, ValueType>::create_tls_dense_buffers_for_dense_threads(
+    const char *acc_flag,
+    const IndexType *min_ccol, const IndexType *max_ccol,
+    const IndexType *cluster_sz)
+{
+    if (local_dense_buf != nullptr) {
+        for (int t = 0; t < allocated_thread_num; ++t) {
+            if (local_dense_buf[t] != nullptr) delete_array(local_dense_buf[t]);
+        }
+        delete[] local_dense_buf;
+    }
+    local_dense_buf = new ValueType*[allocated_thread_num];
+    for (int t = 0; t < allocated_thread_num; ++t) {
+        IndexType start = clusters_offset[t];
+        IndexType end = clusters_offset[t + 1];
+        IndexType max_range = 0;
+        IndexType max_csz = 0;
+        for (IndexType ci = start; ci < end; ++ci) {
+            if (acc_flag[ci] == 1) {
+                IndexType cr = max_ccol[ci] - min_ccol[ci] + 1;
+                if (cr > max_range) max_range = cr;
+                if (cluster_sz[ci] > max_csz) max_csz = cluster_sz[ci];
+            }
+        }
+        if (max_range > 0 && max_csz > 0) {
+            local_dense_buf[t] = new_array<ValueType>(static_cast<size_t>(max_range) * max_csz);
+        } else {
+            local_dense_buf[t] = nullptr;
+        }
     }
 }
 
