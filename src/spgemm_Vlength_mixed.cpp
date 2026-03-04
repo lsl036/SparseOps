@@ -34,29 +34,30 @@ static inline void accumulate_v8_double(
     IndexType csz)
 {
 #if defined(__AVX512F__)
-    if (csz == 8) {
+    /* AVX-512: 一致填充到 8 — 用 mask 处理 csz 1..8，取整列 A 与广播的 bv 做向量化 */
+    if (csz >= 1 && csz <= 8) {
+        __mmask8 mask = (__mmask8)((1U << csz) - 1);
         __m512d bv_v = _mm512_set1_pd(bv);
-        __m512d a_v = _mm512_load_pd(aval_slot);
-        __m512d d_v = _mm512_load_pd(dense_slot);
-        _mm512_store_pd(dense_slot, _mm512_fmadd_pd(a_v, bv_v, d_v));
+        __m512d a_v = _mm512_maskz_loadu_pd(mask, aval_slot);
+        __m512d d_v = _mm512_maskz_loadu_pd(mask, dense_slot);
+        __m512d res = _mm512_fmadd_pd(a_v, bv_v, d_v);
+        _mm512_mask_storeu_pd(dense_slot, mask, res);
         return;
     }
 #elif defined(__AVX2__)
     if (csz == 8) {
         __m256d bv_v = _mm256_set1_pd(bv);
-        __m256d a_lo = _mm256_load_pd(aval_slot);
+        __m256d a_lo = _mm256_loadu_pd(aval_slot);
         __m256d d_lo = _mm256_load_pd(dense_slot);
-        __m256d a_hi = _mm256_load_pd(aval_slot + 4);
+        __m256d a_hi = _mm256_loadu_pd(aval_slot + 4);
         __m256d d_hi = _mm256_load_pd(dense_slot + 4);
         _mm256_store_pd(dense_slot,     _mm256_fmadd_pd(a_lo, bv_v, d_lo));
         _mm256_store_pd(dense_slot + 4, _mm256_fmadd_pd(a_hi, bv_v, d_hi));
         return;
     }
-#endif
-#if defined(__AVX2__)
     if (csz == 4) {
         __m256d bv_v = _mm256_set1_pd(bv);
-        __m256d a_v = _mm256_load_pd(aval_slot);
+        __m256d a_v = _mm256_loadu_pd(aval_slot);
         __m256d d_v = _mm256_load_pd(dense_slot);
         _mm256_store_pd(dense_slot, _mm256_fmadd_pd(a_v, bv_v, d_v));
         return;
@@ -65,7 +66,7 @@ static inline void accumulate_v8_double(
     if (csz == 2) {
 #if defined(__SSE2__)
         __m128d bv_v = _mm_set1_pd(bv);
-        __m128d a_v = _mm_load_pd(aval_slot);
+        __m128d a_v = _mm_loadu_pd(aval_slot);
         __m128d d_v = _mm_load_pd(dense_slot);
         _mm_store_pd(dense_slot, _mm_add_pd(d_v, _mm_mul_pd(a_v, bv_v)));
 #else
@@ -78,55 +79,10 @@ static inline void accumulate_v8_double(
         dense_slot[0] += aval_slot[0] * bv;
         return;
     }
-    /* csz 3,5,6,7 or other: manual unroll */
+    /* AVX2 下 csz 3,5,6,7: 向下取整到 2,4 或标量展开 */
 #pragma GCC unroll 8
     for (IndexType l = 0; l < csz; ++l)
         dense_slot[l] += aval_slot[l] * bv;
-}
-
-template <typename IndexType>
-static inline void accumulate_v8_double_optimized(
-    double *__restrict__ dense_slot,
-    const double *__restrict__ aval_slot,
-    const __m512d bv_512, // 外部广播好的向量
-    IndexType csz)
-{
-#if defined(__AVX512F__)
-    // 1. 生成掩码：例如 csz=3 时生成二进制 00000111
-    __mmask8 mask = (__mmask8)((1U << csz) - 1);
-
-    // 2. 使用 maskz 加载数据，掩码外自动置为 0.0
-    __m512d a_v = _mm512_maskz_loadu_pd(mask, aval_slot);
-    __m512d d_v = _mm512_maskz_loadu_pd(mask, dense_slot);
-
-    // 3. 执行 FMA 计算：res = a_v * bv_512 + d_v
-    __m512d res = _mm512_fmadd_pd(a_v, bv_512, d_v);
-
-    // 4. 关键：使用 mask 存储，确保只修改内存中属于该 Cluster 的 csz 个位置
-    _mm512_mask_storeu_pd(dense_slot, mask, res);
-
-#elif defined(__AVX2__)
-    // 如果没有 AVX-512，退回到 AVX2 的特化分支
-    if (csz == 8) {
-        __m256d bv_256 = _mm512_castpd512_pd256(bv_512); // 取低位
-        _mm256_storeu_pd(dense_slot,     _mm256_fmadd_pd(_mm256_loadu_pd(aval_slot),     bv_256, _mm256_loadu_pd(dense_slot)));
-        _mm256_storeu_pd(dense_slot + 4, _mm256_fmadd_pd(_mm256_loadu_pd(aval_slot + 4), bv_256, _mm256_loadu_pd(dense_slot + 4)));
-    } else if (csz == 4) {
-        __m256d bv_256 = _mm512_castpd512_pd256(bv_512);
-        _mm256_storeu_pd(dense_slot, _mm256_fmadd_pd(_mm256_loadu_pd(aval_slot), bv_256, _mm256_loadu_pd(dense_slot)));
-    } else {
-        // 极短向量或其他长度使用标量 fallback
-        #pragma GCC unroll 8
-        for (IndexType l = 0; l < csz; ++l)
-            dense_slot[l] += aval_slot[l] * _mm512_cvtsd64_f64(bv_512);
-    }
-#else
-    // 基础标量版本
-    double bv_val = _mm512_cvtsd64_f64(bv_512);
-    #pragma GCC unroll 8
-    for (IndexType l = 0; l < csz; ++l)
-        dense_slot[l] += aval_slot[l] * bv_val;
-#endif
 }
 
 template <typename IndexType>
@@ -139,14 +95,14 @@ static inline void accumulate_v8_float(
 #if defined(__AVX2__)
     if (csz == 8) {
         __m256 bv_v = _mm256_set1_ps(bv);
-        __m256 a_v = _mm256_load_ps(aval_slot);
+        __m256 a_v = _mm256_loadu_ps(aval_slot);
         __m256 d_v = _mm256_load_ps(dense_slot);
         _mm256_store_ps(dense_slot, _mm256_fmadd_ps(a_v, bv_v, d_v));
         return;
     }
     if (csz == 4) {
         __m128 bv_v = _mm_set1_ps(bv);
-        __m128 a_v = _mm_load_ps(aval_slot);
+        __m128 a_v = _mm_loadu_ps(aval_slot);
         __m128 d_v = _mm_load_ps(dense_slot);
         _mm_store_ps(dense_slot, _mm_fmadd_ps(a_v, bv_v, d_v));
         return;
@@ -174,22 +130,7 @@ static inline void accumulate_v8(
     double bv,
     IndexType csz)
 {
-    // 这种写法能保证在不支持 AVX-512 的环境下也能编译通过
-#if defined(__AVX512F__)
-    __m512d bv_512 = _mm512_set1_pd(bv);
-    accumulate_v8_double_optimized<IndexType>(dense_slot, aval_slot, bv_512, csz);
-#elif defined(__AVX2__)
-    // 在 AVX2 环境下，optimized 函数内部会自动从 bv_512 降级处理
-    // 但为了严谨，你也可以在这里直接广播 256
-    __m256d bv_256 = _mm256_set1_pd(bv);
-    // 这里需要确保你的 optimized 函数有接收 __m256d 的版本，或者保持之前的统一接口
-    // 简单起见，我建议把广播写在 optimized 内部，外部只传 double
-    accumulate_v8_double_optimized<IndexType>(dense_slot, aval_slot, bv, csz);
-#else
-    // 标量 Fallback
-    for (IndexType l = 0; l < csz; ++l)
-        dense_slot[l] += aval_slot[l] * bv;
-#endif
+    accumulate_v8_double<IndexType>(dense_slot, aval_slot, bv, csz);
 }
 
 template <typename IndexType>
@@ -408,15 +349,15 @@ void spgemm_mixed_numeric_omp_lb(
                 size_t buf_sz = static_cast<size_t>(col_range) * csz;
                 std::memset(dense_buf, 0, buf_sz * sizeof(ValueType));
 
+                /* 从 A 的一列开始向量化：取一个 B 值 bv 广播，与整列 A 做向量运算，整列结果写回 buf */
                 for (IndexType j = col_start; j < col_end; ++j) {
                     t_acol = acol[j];
                     IndexType tmp1 = aval_offset + (j - col_start) * csz;
 
                     for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
-                        IndexType key = bcol[k];
-                        IndexType slot_idx = (key - mc) * csz;
+                        IndexType slot_idx = (bcol[k] - mc) * csz;
                         ValueType bv = bval[k];
-                        // #pragma omp simd
+                        #pragma omp simd unroll(4)
                         for (IndexType l = 0; l < csz; ++l) {
                             dense_buf[slot_idx + l] += aval[tmp1 + l] * bv;
                         }
