@@ -140,6 +140,10 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
         LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     else
         LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+    cout << "[mixed_acc] dense clusters: " << C_cluster.dense_cluster_count
+              << " / " << C_cluster.rows
+              << " (" << (100.0 * C_cluster.dense_cluster_count / C_cluster.rows) << "%)"
+              << std::endl;
     delete_vlength_cluster_matrix(C_cluster);
 
     double total_ms = 0.0;

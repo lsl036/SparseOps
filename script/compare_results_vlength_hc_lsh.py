@@ -10,6 +10,7 @@ Usage:
     --kernel: Select kernel to compare (default: 1)
               1 or hashvlengthcluster_hc_lsh: Hash-based variable-length cluster kernel
               2 or arrayvlengthcluster_hc_lsh: Array-based variable-length cluster kernel
+              3 or mixedvlengthcluster_hc_lsh: Mixed-accumulator variable-length cluster kernel
     --rel-tol: Relative error tolerance (default: 1e-10)
     --abs-tol: Absolute error tolerance (default: 1e-6)
 """ 

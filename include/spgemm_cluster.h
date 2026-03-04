@@ -130,6 +130,7 @@ struct CSR_VlengthCluster : public Matrix_Features<IndexType>
                              // Values for column j in cluster i:
                              //   values[rowptr_val[i] + (j - rowptr[i]) * cluster_sz[i] + k]
                              // where k is the row index within the cluster (0 <= k < cluster_sz[i])
+    int dense_cluster_count;      // number of clusters with acc_flag=1
     char *acc_flag = NULL;          // Optional: hash(0) vs dense(1) per cluster for mixed-accumulator kernel (length: rows); NULL if unused
     IndexType *min_ccol = NULL;     // Optional: min column index per cluster for mixed-accumulator kernel (length: rows); NULL if unused
     IndexType *max_ccol = NULL;     // Optional: max column index per cluster for mixed-accumulator kernel (length: rows); NULL if unused
@@ -292,6 +293,7 @@ public:
     IndexType **local_hash_table_id;  // [thread_id][hash_size]
     ValueType **local_hash_table_val; // [thread_id][hash_size * max_cluster_sz]
     // TLS dense buffer for mixed-accumulator: only allocated for threads that have acc_flag=1 clusters
+    // int dense_cluster_count;            // number of clusters with acc_flag=1
     ValueType **local_dense_buf;     // [thread_id], nullptr if thread has no dense clusters
     int allocated_thread_num;          // number of threads for which memory was allocated
     int64_t total_intprod;           // total intermediate products (for load balancing)
