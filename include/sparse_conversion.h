@@ -1649,7 +1649,7 @@ CSR_VlengthCluster<IndexType, ValueType> csr_to_vlength_cluster(
     cluster.cols = csr.num_cols;
     cluster.nnzc = 0;
     cluster.nnzv = 0;
-    cluster.max_cluster_sz = 256;  // Default, will be updated
+    cluster.max_cluster_sz = 256;  // Default, will be updated, limit when hierarchical_clustering (=8)
     cluster.acc_flag = nullptr;
     
     // Number of clusters = offsets.size() - 1
