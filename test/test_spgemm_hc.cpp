@@ -262,7 +262,12 @@ void test_spgemm_hc_performance(const char *matA_path, const char *matB_path, co
     cout << "Kernel: " << kernel_flag << endl;
 
     CSR_VlengthCluster<IndexType, ValueType> C_cluster;
-    C_cluster.acc_flag = nullptr;
+    // C_cluster.acc_flag = nullptr;
+    if (kernel_flag == 3) {
+        C_cluster.acc_flag = new_array<char>(A_cluster.rows);
+        C_cluster.min_ccol = new_array<IndexType>(A_cluster.rows);
+        C_cluster.max_ccol = new_array<IndexType>(A_cluster.rows);
+    }
     if (sortOutput)
         LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
     else
@@ -286,8 +291,15 @@ void test_spgemm_hc_performance(const char *matA_path, const char *matB_path, co
         double t1 = static_cast<double>(clock()) / CLOCKS_PER_SEC;
 #endif
         total_ms += (t1 - t0) * 1000.0;
-        if (i < iterations - 1) delete_vlength_cluster_matrix(C_cluster);
+        if (i < iterations - 1)
+        {
+            delete_vlength_cluster_matrix(C_cluster);
+        }
     }
+    cout << "[mixed_acc] dense clusters: " << C_cluster.dense_cluster_count
+              << " / " << C_cluster.rows
+              << " (" << (100.0 * C_cluster.dense_cluster_count / C_cluster.rows) << "%)"
+              << std::endl;
     double avg_ms = total_ms / iterations;
     cout << "Average time: " << avg_ms << " ms" << endl;
     cout << "Average GFLOPS: " << (flops / 1e9) / (avg_ms / 1000.0) << endl;
@@ -296,6 +308,12 @@ void test_spgemm_hc_performance(const char *matA_path, const char *matB_path, co
     delete_vlength_cluster_matrix(A_cluster);
     delete_host_matrix(A_csr);
     delete_host_matrix(B);
+    if (kernel_flag == 3) {
+        delete_array(C_cluster.acc_flag);
+        delete_array(C_cluster.min_ccol);
+        delete_array(C_cluster.max_ccol);
+    }
+    cout << "Performance test done." << endl;
 }
 
 template <typename IndexType, typename ValueType>

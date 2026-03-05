@@ -34,6 +34,7 @@ static void usage(int argc, char **argv) {
     std::cout << "\t  --threads      = number of OMP threads\n";
     std::cout << "\t  --iterations   = iterations for performance (default 10)\n";
     std::cout << "\t  --kernel       = 1 (Hash VLength), 2 (Array VLength), or 3 (Mixed-accumulator, default 1)\n";
+    std::cout << "\t  --l2_fraction  = L2 budget fraction 0~1 for kernel=3 (default: use MIXED_L2_FRACTION)\n";
     std::cout << "\t  --cluster_size = max cluster size (default 8)\n";
     std::cout << "\t  --sort         = 0|1 (sort output columns, default 0)\n";
     std::cout << "\t  --k            = MinHash signature length (default 64)\n";
@@ -47,7 +48,7 @@ template <typename IndexType, typename ValueType>
 void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path,
                                     int iterations, int kernel_flag, bool sortOutput,
                                     IndexType cluster_size, int k, int num_bands, uint64_t seed,
-                                    int hc_v)
+                                    int hc_v, double l2_fraction)
 {
     cout << "========================================" << endl;
     cout << "MinHash+LSH -> Vlength-Cluster SpGEMM Performance" << endl;
@@ -137,13 +138,14 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
         C_cluster.max_ccol = new_array<IndexType>(A_cluster.rows);
     }
     if (sortOutput)
-        LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+        LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
     else
-        LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+        LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
+    if (kernel_flag == 3) {
     cout << "[mixed_acc] dense clusters: " << C_cluster.dense_cluster_count
               << " / " << C_cluster.rows
               << " (" << (100.0 * C_cluster.dense_cluster_count / C_cluster.rows) << "%)"
-              << std::endl;
+              << std::endl;}
     delete_vlength_cluster_matrix(C_cluster);
 
     double total_ms = 0.0;
@@ -154,9 +156,9 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
         double t0 = static_cast<double>(clock()) / CLOCKS_PER_SEC;
 #endif
         if (sortOutput)
-            LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+            LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
         else
-            LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+            LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
 #ifdef _OPENMP
         double t1 = omp_get_wtime();
 #else
@@ -185,7 +187,7 @@ template <typename IndexType, typename ValueType>
 void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path,
                                     int kernel_flag, bool sortOutput,
                                     IndexType cluster_size, int k, int num_bands, uint64_t seed,
-                                    int hc_v)
+                                    int hc_v, double l2_fraction)
 {
     cout << "========================================" << endl;
     cout << "MinHash+LSH -> Vlength-Cluster SpGEMM Correctness" << endl;
@@ -266,9 +268,9 @@ void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path
     anonymouslib_timer timer;
     timer.start();
     if (sortOutput)
-        LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+        LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
     else
-        LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag);
+        LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
     double time_ms = timer.stop();
     cout << "C_cluster: " << C_cluster.rows << " clusters, nnzc=" << C_cluster.nnzc << endl;
     cout << "Time: " << time_ms << " ms" << endl;
@@ -383,6 +385,10 @@ void run_spgemm_hc_lsh_test(int argc, char **argv)
         if (hc_v != 0 && hc_v != 1 && hc_v != 2) hc_v = 0;
     }
 
+    double l2_fraction = -1.0;
+    p = get_argval(argc, argv, "l2_fraction");
+    if (p) l2_fraction = atof(p);
+
     const char *test_type = "performance";
     p = get_argval(argc, argv, "test_type");
     if (p) test_type = p;
@@ -390,16 +396,18 @@ void run_spgemm_hc_lsh_test(int argc, char **argv)
     cout << "A: " << matA << ", B: " << matB << endl;
     cout << "test_type: " << test_type << ", LSH: k=" << k << ", bands=" << num_bands << ", seed=" << seed << ", hc_v: " << hc_v << endl;
     cout << "kernel: " << kernel_flag << ", cluster_size: " << cluster_size;
+    if (kernel_flag == 3 && l2_fraction >= 0.0)
+        cout << ", l2_fraction: " << l2_fraction;
     if (strcmp(test_type, "performance") == 0) cout << ", iterations: " << iterations;
     cout << endl;
     cout << "threads: " << Le_get_thread_num() << endl;
 
     if (strcmp(test_type, "correctness") == 0) {
         test_spgemm_hc_lsh_correctness<IndexType, ValueType>(
-            matA, matB, kernel_flag, sortOutput, cluster_size, k, num_bands, seed, hc_v);
+            matA, matB, kernel_flag, sortOutput, cluster_size, k, num_bands, seed, hc_v, l2_fraction);
     } else {
         test_spgemm_hc_lsh_performance<IndexType, ValueType>(
-            matA, matB, iterations, kernel_flag, sortOutput, cluster_size, k, num_bands, seed, hc_v);
+            matA, matB, iterations, kernel_flag, sortOutput, cluster_size, k, num_bands, seed, hc_v, l2_fraction);
     }
 }
 

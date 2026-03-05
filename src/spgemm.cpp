@@ -543,7 +543,8 @@ void LeSpGEMM_array_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cl
 template <bool sortOutput, typename IndexType, typename ValueType>
 void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
                         const CSR_Matrix<IndexType, ValueType> &B,
-                        CSR_VlengthCluster<IndexType, ValueType> &C_cluster)
+                        CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
+                        double l2_fraction)
 {
     SpGEMM_BIN_VlengthCluster<IndexType, ValueType> *bin =
         new SpGEMM_BIN_VlengthCluster<IndexType, ValueType>(A_cluster.rows, MIN_HT_S, A_cluster.cluster_sz);
@@ -585,8 +586,10 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
     /* ---- Classify: hash vs. dense per cluster ---- */
     double B_rowdense = static_cast<double>(B.num_nnzs) / static_cast<double>(B.num_rows);
     /* L2 is per-CPU (not shared across cores); use total L2 size as budget (no division by core count). */
+    // 为了验证 L2，扩大到 1.0～2.0 应该出现性能下降
+    double l2_frac = (l2_fraction >= 0.0 && l2_fraction <= 2.0) ? l2_fraction : static_cast<double>(MIXED_L2_FRACTION);
     size_t L2_budget = static_cast<size_t>(
-        static_cast<double>(CPU_L2CACHE_SIZE) * MIXED_L2_FRACTION);
+        static_cast<double>(CPU_L2CACHE_SIZE) * l2_frac);
 
     // if (!C_cluster.acc_flag)
     //     C_cluster.acc_flag = new_array<char>(C_cluster.rows);
@@ -628,7 +631,8 @@ template <bool sortOutput, typename IndexType, typename ValueType>
 void LeSpGEMM_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
                       const CSR_Matrix<IndexType, ValueType> &B,
                       CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
-                      int kernel_flag)
+                      int kernel_flag,
+                      double mixed_l2_fraction)
 {
     // kernel_flag = 1: Hash-based cluster-wise method (default)
     // kernel_flag = 2: Array-based cluster-wise method
@@ -638,7 +642,7 @@ void LeSpGEMM_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
     } else if (kernel_flag == 2) {
         LeSpGEMM_array_VLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
     } else if (kernel_flag == 3) {
-        LeSpGEMM_mixed_acc<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
+        LeSpGEMM_mixed_acc<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster, mixed_l2_fraction);
     } else {
         LeSpGEMM_hash_VLength<sortOutput, IndexType, ValueType>(A_cluster, B, C_cluster);
     }
@@ -944,30 +948,30 @@ template void LeSpGEMM_array_VLength<false, int64_t, double>(
 // LeSpGEMM_mixed_acc instantiations (sortOutput = true and false)
 template void LeSpGEMM_mixed_acc<true, int64_t, float>(
     const CSR_VlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
-    CSR_VlengthCluster<int64_t, float>&);
+    CSR_VlengthCluster<int64_t, float>&, double);
 template void LeSpGEMM_mixed_acc<false, int64_t, float>(
     const CSR_VlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
-    CSR_VlengthCluster<int64_t, float>&);
+    CSR_VlengthCluster<int64_t, float>&, double);
 template void LeSpGEMM_mixed_acc<true, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
-    CSR_VlengthCluster<int64_t, double>&);
+    CSR_VlengthCluster<int64_t, double>&, double);
 template void LeSpGEMM_mixed_acc<false, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
-    CSR_VlengthCluster<int64_t, double>&);
+    CSR_VlengthCluster<int64_t, double>&, double);
 
 // LeSpGEMM_VLength instantiations (sortOutput = true and false)
 template void LeSpGEMM_VLength<true, int64_t, float>(
     const CSR_VlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
-    CSR_VlengthCluster<int64_t, float>&, int);
+    CSR_VlengthCluster<int64_t, float>&, int, double);
 template void LeSpGEMM_VLength<false, int64_t, float>(
     const CSR_VlengthCluster<int64_t, float>&, const CSR_Matrix<int64_t, float>&,
-    CSR_VlengthCluster<int64_t, float>&, int);
+    CSR_VlengthCluster<int64_t, float>&, int, double);
 template void LeSpGEMM_VLength<true, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
-    CSR_VlengthCluster<int64_t, double>&, int);
+    CSR_VlengthCluster<int64_t, double>&, int, double);
 template void LeSpGEMM_VLength<false, int64_t, double>(
     const CSR_VlengthCluster<int64_t, double>&, const CSR_Matrix<int64_t, double>&,
-    CSR_VlengthCluster<int64_t, double>&, int);
+    CSR_VlengthCluster<int64_t, double>&, int, double);
 
 // HashSpGEMMTopK instantiations
 template void HashSpGEMMTopK<int64_t, float>(

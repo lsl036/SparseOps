@@ -170,12 +170,14 @@ void LeSpGEMM_array_FLength(const CSR_FlengthCluster<IndexType, ValueType> &A_cl
  * @param B Input matrix B in CSR_Matrix format
  * @param C_cluster Output matrix C in CSR_VlengthCluster format (will be allocated)
  * @param kernel_flag Kernel selection flag (1=hash-based cluster-wise, default; 2=array-based, future)
+ * @param mixed_l2_fraction When kernel_flag=3, L2 budget = CPU_L2CACHE_SIZE * mixed_l2_fraction (0~1). If < 0, use MIXED_L2_FRACTION.
  */
 template <bool sortOutput = true, typename IndexType, typename ValueType>
 void LeSpGEMM_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
                       const CSR_Matrix<IndexType, ValueType> &B,
                       CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
-                      int kernel_flag = 1);
+                      int kernel_flag = 1,
+                      double mixed_l2_fraction = -1.0);
 
 /**
  * @brief Hash-based Variable-length Cluster-wise SpGEMM implementation
@@ -208,11 +210,13 @@ void LeSpGEMM_hash_VLength(const CSR_VlengthCluster<IndexType, ValueType> &A_clu
  * @param A_cluster Input matrix A in CSR_VlengthCluster format
  * @param B Input matrix B in CSR_Matrix format
  * @param C_cluster Output matrix C in CSR_VlengthCluster format (will be allocated)
+ * @param l2_fraction L2 budget = CPU_L2CACHE_SIZE * l2_fraction (0~1). If < 0, use MIXED_L2_FRACTION.
  */
 template <bool sortOutput = true, typename IndexType, typename ValueType>
 void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluster,
                         const CSR_Matrix<IndexType, ValueType> &B,
-                        CSR_VlengthCluster<IndexType, ValueType> &C_cluster);
+                        CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
+                        double l2_fraction = -1.0);
 
 /**
  * @brief HashSpGEMMTopK: Compute A * AT with binary pattern and keep top-k similarities per row

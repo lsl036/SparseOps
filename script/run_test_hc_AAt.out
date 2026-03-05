@@ -1,0 +1,586 @@
+Using build dir: /data/lsl/SparseOps/build, kernel: 3
+========================================
+
+===== Dataset: cant =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/cant/cant.mtx, B: /data/suitesparse_collection/cant/cant.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/cant.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/cant/cant.mtx
+- Finish Reading data from /data/suitesparse_collection/cant/cant.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/cant/cant.mtx
+- Finish Reading data from /data/suitesparse_collection/cant/cant.mtx
+FLOPs: 538972946
+Kernel: 3
+[mixed_acc] dense clusters: 5999 / 5999 (100%)
+Average time: 37.6841 ms
+Average GFLOPS: 14.3024
+Performance test done.
+
+===== Dataset: pwtk =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/pwtk/pwtk.mtx, B: /data/suitesparse_collection/pwtk/pwtk.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/pwtk.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/pwtk/pwtk.mtx
+- Finish Reading data from /data/suitesparse_collection/pwtk/pwtk.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/pwtk/pwtk.mtx
+- Finish Reading data from /data/suitesparse_collection/pwtk/pwtk.mtx
+FLOPs: 1252108804
+Kernel: 3
+[mixed_acc] dense clusters: 591 / 18950 (3.11873%)
+Average time: 64.4484 ms
+Average GFLOPS: 19.4281
+Performance test done.
+
+===== Dataset: offshore =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/offshore/offshore.mtx, B: /data/suitesparse_collection/offshore/offshore.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/offshore.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/offshore/offshore.mtx
+- Finish Reading data from /data/suitesparse_collection/offshore/offshore.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/offshore/offshore.mtx
+- Finish Reading data from /data/suitesparse_collection/offshore/offshore.mtx
+FLOPs: 142685030
+Kernel: 3
+[mixed_acc] dense clusters: 61 / 30462 (0.200249%)
+Average time: 95.0454 ms
+Average GFLOPS: 1.50123
+Performance test done.
+
+===== Dataset: cage12 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/cage12/cage12.mtx, B: /data/suitesparse_collection/cage12/cage12.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/cage12.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/cage12/cage12.mtx
+- Finish Reading data from /data/suitesparse_collection/cage12/cage12.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/cage12/cage12.mtx
+- Finish Reading data from /data/suitesparse_collection/cage12/cage12.mtx
+FLOPs: 69221652
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 17355 (0%)
+Average time: 72.0197 ms
+Average GFLOPS: 0.961148
+Performance test done.
+
+===== Dataset: scircuit =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/scircuit/scircuit.mtx, B: /data/suitesparse_collection/scircuit/scircuit.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/scircuit.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/scircuit/scircuit.mtx
+- Finish Reading data from /data/suitesparse_collection/scircuit/scircuit.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/scircuit/scircuit.mtx
+- Finish Reading data from /data/suitesparse_collection/scircuit/scircuit.mtx
+FLOPs: 17352626
+Kernel: 3
+[mixed_acc] dense clusters: 167 / 20904 (0.79889%)
+Average time: 15.5451 ms
+Average GFLOPS: 1.11627
+Performance test done.
+
+===== Dataset: wiki-Vote =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/wiki-Vote/wiki-Vote.mtx, B: /data/suitesparse_collection/wiki-Vote/wiki-Vote.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/wiki-Vote.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/wiki-Vote/wiki-Vote.mtx
+- Finish Reading data from /data/suitesparse_collection/wiki-Vote/wiki-Vote.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/wiki-Vote/wiki-Vote.mtx
+- Finish Reading data from /data/suitesparse_collection/wiki-Vote/wiki-Vote.mtx
+FLOPs: 9085610
+Kernel: 3
+[mixed_acc] dense clusters: 204 / 3063 (6.66014%)
+Average time: 8.8311 ms
+Average GFLOPS: 1.02882
+Performance test done.
+
+===== Dataset: patents_main =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/patents_main/patents_main.mtx, B: /data/suitesparse_collection/patents_main/patents_main.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/patents_main.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/patents_main/patents_main.mtx
+- Finish Reading data from /data/suitesparse_collection/patents_main/patents_main.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/patents_main/patents_main.mtx
+- Finish Reading data from /data/suitesparse_collection/patents_main/patents_main.mtx
+FLOPs: 5209580
+Kernel: 3
+[mixed_acc] dense clusters: 10100 / 100540 (10.0458%)
+Average time: 12.1568 ms
+Average GFLOPS: 0.428532
+Performance test done.
+
+===== Dataset: poisson3Da =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/poisson3Da/poisson3Da.mtx, B: /data/suitesparse_collection/poisson3Da/poisson3Da.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/poisson3Da.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/poisson3Da/poisson3Da.mtx
+- Finish Reading data from /data/suitesparse_collection/poisson3Da/poisson3Da.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/poisson3Da/poisson3Da.mtx
+- Finish Reading data from /data/suitesparse_collection/poisson3Da/poisson3Da.mtx
+FLOPs: 23537356
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 1633 (0%)
+Average time: 7.55489 ms
+Average GFLOPS: 3.11551
+Performance test done.
+
+===== Dataset: pdb1HYS =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/pdb1HYS/pdb1HYS.mtx, B: /data/suitesparse_collection/pdb1HYS/pdb1HYS.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/pdb1HYS.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/pdb1HYS/pdb1HYS.mtx
+- Finish Reading data from /data/suitesparse_collection/pdb1HYS/pdb1HYS.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/pdb1HYS/pdb1HYS.mtx
+- Finish Reading data from /data/suitesparse_collection/pdb1HYS/pdb1HYS.mtx
+FLOPs: 1110645318
+Kernel: 3
+[mixed_acc] dense clusters: 1396 / 4806 (29.047%)
+Average time: 74.8016 ms
+Average GFLOPS: 14.8479
+Performance test done.
+
+===== Dataset: rma10 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/rma10/rma10.mtx, B: /data/suitesparse_collection/rma10/rma10.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/rma10.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/rma10/rma10.mtx
+- Finish Reading data from /data/suitesparse_collection/rma10/rma10.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/rma10/rma10.mtx
+- Finish Reading data from /data/suitesparse_collection/rma10/rma10.mtx
+FLOPs: 312960518
+Kernel: 3
+[mixed_acc] dense clusters: 1819 / 5419 (33.5671%)
+Average time: 22.2051 ms
+Average GFLOPS: 14.0941
+Performance test done.
+
+===== Dataset: shipsec1 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/shipsec1/shipsec1.mtx, B: /data/suitesparse_collection/shipsec1/shipsec1.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/shipsec1.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/shipsec1/shipsec1.mtx
+- Finish Reading data from /data/suitesparse_collection/shipsec1/shipsec1.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/shipsec1/shipsec1.mtx
+- Finish Reading data from /data/suitesparse_collection/shipsec1/shipsec1.mtx
+FLOPs: 901278576
+Kernel: 3
+[mixed_acc] dense clusters: 112 / 12522 (0.894426%)
+Average time: 53.8194 ms
+Average GFLOPS: 16.7464
+Performance test done.
+
+===== Dataset: consph =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/consph/consph.mtx, B: /data/suitesparse_collection/consph/consph.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/consph.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/consph/consph.mtx
+- Finish Reading data from /data/suitesparse_collection/consph/consph.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/consph/consph.mtx
+- Finish Reading data from /data/suitesparse_collection/consph/consph.mtx
+FLOPs: 927690060
+Kernel: 3
+[mixed_acc] dense clusters: 4084 / 12583 (32.4565%)
+Average time: 74.7833 ms
+Average GFLOPS: 12.405
+Performance test done.
+
+===== Dataset: filter3D =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/filter3D/filter3D.mtx, B: /data/suitesparse_collection/filter3D/filter3D.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/filter3D.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/filter3D/filter3D.mtx
+- Finish Reading data from /data/suitesparse_collection/filter3D/filter3D.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/filter3D/filter3D.mtx
+- Finish Reading data from /data/suitesparse_collection/filter3D/filter3D.mtx
+FLOPs: 171914370
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 12986 (0%)
+Average time: 51.7505 ms
+Average GFLOPS: 3.32198
+Performance test done.
+
+===== Dataset: mac_econ_fwd500 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/mac_econ_fwd500/mac_econ_fwd500.mtx, B: /data/suitesparse_collection/mac_econ_fwd500/mac_econ_fwd500.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/mac_econ_fwd500.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/mac_econ_fwd500/mac_econ_fwd500.mtx
+- Finish Reading data from /data/suitesparse_collection/mac_econ_fwd500/mac_econ_fwd500.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/mac_econ_fwd500/mac_econ_fwd500.mtx
+- Finish Reading data from /data/suitesparse_collection/mac_econ_fwd500/mac_econ_fwd500.mtx
+FLOPs: 15113794
+Kernel: 3
+[mixed_acc] dense clusters: 181 / 25930 (0.698033%)
+Average time: 18.7321 ms
+Average GFLOPS: 0.80684
+Performance test done.
+
+===== Dataset: asia_osm =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/asia_osm/asia_osm.mtx, B: /data/suitesparse_collection/asia_osm/asia_osm.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/asia_osm.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/asia_osm/asia_osm.mtx
+- Finish Reading data from /data/suitesparse_collection/asia_osm/asia_osm.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/asia_osm/asia_osm.mtx
+- Finish Reading data from /data/suitesparse_collection/asia_osm/asia_osm.mtx
+FLOPs: 113785436
+Kernel: 3
+[mixed_acc] dense clusters: 562487 / 1466930 (38.3445%)
+Average time: 216.061 ms
+Average GFLOPS: 0.526634
+Performance test done.
+
+===== Dataset: af_shell10 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/af_shell10/af_shell10.mtx, B: /data/suitesparse_collection/af_shell10/af_shell10.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/af_shell10.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/af_shell10/af_shell10.mtx
+- Finish Reading data from /data/suitesparse_collection/af_shell10/af_shell10.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/af_shell10/af_shell10.mtx
+- Finish Reading data from /data/suitesparse_collection/af_shell10/af_shell10.mtx
+FLOPs: 3681833750
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 151224 (0%)
+Average time: 324.563 ms
+Average GFLOPS: 11.344
+Performance test done.
+
+===== Dataset: hood =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/hood/hood.mtx, B: /data/suitesparse_collection/hood/hood.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/hood.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/hood/hood.mtx
+- Finish Reading data from /data/suitesparse_collection/hood/hood.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/hood/hood.mtx
+- Finish Reading data from /data/suitesparse_collection/hood/hood.mtx
+FLOPs: 1124056276
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 20047 (0%)
+Average time: 77.0955 ms
+Average GFLOPS: 14.5801
+Performance test done.
+
+===== Dataset: case39 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/case39/case39.mtx, B: /data/suitesparse_collection/case39/case39.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/case39.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/case39/case39.mtx
+- Finish Reading data from /data/suitesparse_collection/case39/case39.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/case39/case39.mtx
+- Finish Reading data from /data/suitesparse_collection/case39/case39.mtx
+FLOPs: 8097139548
+Kernel: 3
+[mixed_acc] dense clusters: 2696 / 4737 (56.9137%)
+Average time: 542.64 ms
+Average GFLOPS: 14.9217
+Performance test done.
+
+===== Dataset: gupta3 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/gupta3/gupta3.mtx, B: /data/suitesparse_collection/gupta3/gupta3.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/gupta3.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/gupta3/gupta3.mtx
+- Finish Reading data from /data/suitesparse_collection/gupta3/gupta3.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/gupta3/gupta3.mtx
+- Finish Reading data from /data/suitesparse_collection/gupta3/gupta3.mtx
+FLOPs: 61431943634
+Kernel: 3
+[mixed_acc] dense clusters: 2083 / 2171 (95.9466%)
+Average time: 2324.32 ms
+Average GFLOPS: 26.43
+Performance test done.
+
+===== Dataset: TSOPF_FS_b300_c2 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/TSOPF_FS_b300_c2/TSOPF_FS_b300_c2.mtx, B: /data/suitesparse_collection/TSOPF_FS_b300_c2/TSOPF_FS_b300_c2.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/TSOPF_FS_b300_c2.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/TSOPF_FS_b300_c2/TSOPF_FS_b300_c2.mtx
+- Finish Reading data from /data/suitesparse_collection/TSOPF_FS_b300_c2/TSOPF_FS_b300_c2.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/TSOPF_FS_b300_c2/TSOPF_FS_b300_c2.mtx
+- Finish Reading data from /data/suitesparse_collection/TSOPF_FS_b300_c2/TSOPF_FS_b300_c2.mtx
+FLOPs: 107894274940
+Kernel: 3
+[mixed_acc] dense clusters: 4054 / 6476 (62.6004%)
+Average time: 6740.48 ms
+Average GFLOPS: 16.0069
+Performance test done.
+
+===== Dataset: delaunay_n24 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/delaunay_n24/delaunay_n24.mtx, B: /data/suitesparse_collection/delaunay_n24/delaunay_n24.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/delaunay_n24.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/delaunay_n24/delaunay_n24.mtx
+- Finish Reading data from /data/suitesparse_collection/delaunay_n24/delaunay_n24.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/delaunay_n24/delaunay_n24.mtx
+- Finish Reading data from /data/suitesparse_collection/delaunay_n24/delaunay_n24.mtx
+FLOPs: 1267828744
+Kernel: 3
+[mixed_acc] dense clusters: 167 / 2232473 (0.00748049%)
+Average time: 1385.42 ms
+Average GFLOPS: 0.915122
+Performance test done.
+
+===== Dataset: webbase-1M =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/webbase-1M/webbase-1M.mtx, B: /data/suitesparse_collection/webbase-1M/webbase-1M.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/webbase-1M.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/webbase-1M/webbase-1M.mtx
+- Finish Reading data from /data/suitesparse_collection/webbase-1M/webbase-1M.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/webbase-1M/webbase-1M.mtx
+- Finish Reading data from /data/suitesparse_collection/webbase-1M/webbase-1M.mtx
+FLOPs: 139048390
+Kernel: 3
+[mixed_acc] dense clusters: 5928 / 387453 (1.52999%)
+Average time: 120.325 ms
+Average GFLOPS: 1.1556
+Performance test done.
+
+===== Dataset: AS365 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/AS365/AS365.mtx, B: /data/suitesparse_collection/AS365/AS365.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/AS365.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/AS365/AS365.mtx
+- Finish Reading data from /data/suitesparse_collection/AS365/AS365.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/AS365/AS365.mtx
+- Finish Reading data from /data/suitesparse_collection/AS365/AS365.mtx
+FLOPs: 277813656
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 555860 (0%)
+Average time: 369.708 ms
+Average GFLOPS: 0.75144
+Performance test done.
+
+===== Dataset: com-LiveJournal =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/com-LiveJournal/com-LiveJournal.mtx, B: /data/suitesparse_collection/com-LiveJournal/com-LiveJournal.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/com-LiveJournal.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/com-LiveJournal/com-LiveJournal.mtx
+- Finish Reading data from /data/suitesparse_collection/com-LiveJournal/com-LiveJournal.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/com-LiveJournal/com-LiveJournal.mtx
+- Finish Reading data from /data/suitesparse_collection/com-LiveJournal/com-LiveJournal.mtx
+FLOPs: 17161797536
+Kernel: 3
+[mixed_acc] dense clusters: 897 / 610727 (0.146874%)
+Average time: 25377.2 ms
+Average GFLOPS: 0.676269
+Performance test done.
+
+===== Dataset: europe_osm =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/europe_osm/europe_osm.mtx, B: /data/suitesparse_collection/europe_osm/europe_osm.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/europe_osm.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/europe_osm/europe_osm.mtx
+- Finish Reading data from /data/suitesparse_collection/europe_osm/europe_osm.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/europe_osm/europe_osm.mtx
+- Finish Reading data from /data/suitesparse_collection/europe_osm/europe_osm.mtx
+FLOPs: 482555136
+Kernel: 3
+[mixed_acc] dense clusters: 1672732 / 6327154 (26.4374%)
+Average time: 1160.43 ms
+Average GFLOPS: 0.415843
+Performance test done.
+
+===== Dataset: GAP-road =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/GAP-road/GAP-road.mtx, B: /data/suitesparse_collection/GAP-road/GAP-road.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/GAP-road.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/GAP-road/GAP-road.mtx
+- Finish Reading data from /data/suitesparse_collection/GAP-road/GAP-road.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/GAP-road/GAP-road.mtx
+- Finish Reading data from /data/suitesparse_collection/GAP-road/GAP-road.mtx
+FLOPs: 319468132
+Kernel: 3
+[mixed_acc] dense clusters: 13824 / 3322571 (0.416063%)
+Average time: 699.276 ms
+Average GFLOPS: 0.456856
+Performance test done.
+
+===== Dataset: kkt_power =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/kkt_power/kkt_power.mtx, B: /data/suitesparse_collection/kkt_power/kkt_power.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/kkt_power.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/kkt_power/kkt_power.mtx
+- Finish Reading data from /data/suitesparse_collection/kkt_power/kkt_power.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/kkt_power/kkt_power.mtx
+- Finish Reading data from /data/suitesparse_collection/kkt_power/kkt_power.mtx
+FLOPs: 432975710
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 353988 (0%)
+Average time: 339.659 ms
+Average GFLOPS: 1.27474
+Performance test done.
+
+===== Dataset: M6 =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/M6/M6.mtx, B: /data/suitesparse_collection/M6/M6.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/M6.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/M6/M6.mtx
+- Finish Reading data from /data/suitesparse_collection/M6/M6.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/M6/M6.mtx
+- Finish Reading data from /data/suitesparse_collection/M6/M6.mtx
+FLOPs: 256962436
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 510506 (0%)
+Average time: 335.93 ms
+Average GFLOPS: 0.764929
+Performance test done.
+
+===== Dataset: NLR =====
+Precision: 64-bit, threads: 28
+
+A: /data/suitesparse_collection/NLR/NLR.mtx, B: /data/suitesparse_collection/NLR/NLR.mtx, candidate_pairs: /data2/linshengle_data/SpGEMM-Reordering/close_pairs/NLR.mtx
+test_type: performance, kernel: 3, cluster_size: 8
+threads: 28
+========================================
+Hierarchical Cluster SpGEMM Performance
+========================================
+- Reading sparse matrix from file: /data/suitesparse_collection/NLR/NLR.mtx
+- Finish Reading data from /data/suitesparse_collection/NLR/NLR.mtx
+- Reading sparse matrix from file: /data/suitesparse_collection/NLR/NLR.mtx
+- Finish Reading data from /data/suitesparse_collection/NLR/NLR.mtx
+FLOPs: 305534880
+Kernel: 3
+[mixed_acc] dense clusters: 0 / 606004 (0%)
+Average time: 460.391 ms
+Average GFLOPS: 0.663643
+Performance test done.
+Skip wikipedia-20070206: candidate pairs not found /data2/linshengle_data/SpGEMM-Reordering/close_pairs/wikipedia-20070206.mtx
+
+========================================
+Done.
