@@ -297,6 +297,12 @@ IndexType classify_clusters(
             acc_flag[i] = 1;
             dense_count++;
         }
+
+        // too loose to control density
+        // if ((B_access_bytes + dense_bytes) <= L2_budget ) {
+        //     acc_flag[i] = 1;
+        //     dense_count++;
+        // }
     }
     return dense_count;
 }
@@ -357,7 +363,7 @@ void spgemm_mixed_numeric_omp_lb(
                     for (IndexType k = brpt[t_acol]; k < brpt[t_acol + 1]; ++k) {
                         IndexType slot_idx = (bcol[k] - mc) * csz;
                         ValueType bv = bval[k];
-                        #pragma omp simd unroll(4)
+                        #pragma omp simd
                         for (IndexType l = 0; l < csz; ++l) {
                             dense_buf[slot_idx + l] += aval[tmp1 + l] * bv;
                         }

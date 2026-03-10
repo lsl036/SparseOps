@@ -6,6 +6,7 @@ Auto-tune k and bands for test_spgemm_hc_lsh.
 - Records: mtxname, k, bands, r, genPairs_time, HC_time, Format_Conversion_time, LeSpGEMM_VLength_time.
 
 Usage:
+  # Script sets OMP_PLACES=cores and OMP_PROC_BIND=spread for each run.
   # One or more datasets; matrix path = BASE_DIR/NAME/NAME.mtx
   python3 script/tune_k_bands_hc_lsh.py pdb1HYS scircuit --base-dir /data/suitesparse_collection -o results.csv
   # Run from build dir or set --binary to path of test_spgemm_hc_lsh
@@ -82,7 +83,10 @@ def run_one(binary, mtx_path, k, bands, extra_args, timeout_sec):
         "--bands=%d" % bands,
         *extra_args,
     ]
-    kwargs = {"capture_output": True, "text": True}
+    env = os.environ.copy()
+    env["OMP_PLACES"] = "cores"
+    env["OMP_PROC_BIND"] = "spread"
+    kwargs = {"capture_output": True, "text": True, "env": env}
     if timeout_sec is not None:
         kwargs["timeout"] = timeout_sec
     try:
@@ -132,11 +136,18 @@ def main():
         help="Output CSV path (default: tune_k_bands_results.csv)",
     )
     parser.add_argument(
+        "--kernel",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Pass --kernel=N to binary (e.g. 3 for mixed-accumulator). Avoids quoting with --extra.",
+    )
+    parser.add_argument(
         "--extra",
         nargs="?",
         default="",
         metavar="ARGS",
-        help="Extra args passed to binary (e.g. '--kernel=3' or '--iterations=5 --cluster_size=8'). Use --extra='--kernel=3' if shell strips quotes.",
+        help="Extra args passed to binary (e.g. '--iterations=5 --cluster_size=8'). For kernel use --kernel 3.",
     )
     parser.add_argument(
         "--timeout",
@@ -174,7 +185,11 @@ def main():
         print("Error: provide datasets as arguments or --datasets-file FILE", file=sys.stderr)
         sys.exit(1)
 
-    extra_args = args.extra.split() if args.extra else []
+    extra_args = []
+    if args.kernel is not None:
+        extra_args.append("--kernel=%d" % args.kernel)
+    if args.extra:
+        extra_args.extend(args.extra.split())
     k_bands_list = list(k_bands_candidates())
 
     timeout_sec = args.timeout if args.timeout > 0 else None  # None = no limit

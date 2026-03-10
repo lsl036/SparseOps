@@ -22,12 +22,12 @@ from collections import defaultdict
 
 # Matrix names array for easy extension
 MATRIX_NAMES = [
-    'bcspwr10',
+    # 'bcspwr10',
     # 'bcsstk32',
-    'skirt_id_764',
-    '2cubes_sphere',
-    # 'cant'
-    'poisson3Da'
+    # 'skirt_id_764',
+    # '2cubes_sphere',
+    'cant'
+    # 'poisson3Da'
     # Add more matrix names here in the future
 ]
 

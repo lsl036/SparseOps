@@ -588,8 +588,7 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
     /* L2 is per-CPU (not shared across cores); use total L2 size as budget (no division by core count). */
     // 为了验证 L2，扩大到 1.0～2.0 应该出现性能下降
     double l2_frac = (l2_fraction >= 0.0 && l2_fraction <= 2.0) ? l2_fraction : static_cast<double>(MIXED_L2_FRACTION);
-    size_t L2_budget = static_cast<size_t>(
-        static_cast<double>(CPU_L2CACHE_SIZE) * l2_frac);
+    size_t L2_budget = static_cast<size_t>(static_cast<double>(CPU_L2CACHE_SIZE) * l2_frac);
 
     // if (!C_cluster.acc_flag)
     //     C_cluster.acc_flag = new_array<char>(C_cluster.rows);

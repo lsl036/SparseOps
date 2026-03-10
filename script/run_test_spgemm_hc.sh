@@ -29,9 +29,13 @@ while IFS= read -r name || [[ -n "$name" ]]; do
 
   A="/data/suitesparse_collection/$name/$name.mtx"
   B="/data/suitesparse_collection/$name/$name.mtx"
-  # CAND="$ROOT/script/${name}_candidate_pairs_topk7.mtx"
-  CAND="/data2/linshengle_data/SpGEMM-Reordering/close_pairs/$name.mtx"
-
+  # AAt
+  # CAND="/data2/linshengle_data/SpGEMM-Reordering/close_pairs/$name.mtx"
+  # Graph Partition
+  CAND="/data2/linshengle_data/SpGEMM-Reordering/gp_order/$name.mtx"
+  # Hypergraph Partition
+  # CAND="/data2/linshengle_data/SpGEMM-Reordering/hp_order/$name.mtx"
+  
   if [[ ! -f "$A" ]]; then
     echo "Skip $name: A not found $A"
     continue
@@ -51,4 +55,4 @@ echo "========================================"
 echo "Done."
 
 # 运行python分析脚本提取结果
-python3 parse_run_test_hc_output.py run_test_hc_AAt.out run_test_hc_AAt_results.csv
+# python3 parse_run_test_hc_output.py run_test_hc_AAt.out run_test_hc_AAt_results.csv

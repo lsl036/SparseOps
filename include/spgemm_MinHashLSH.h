@@ -505,7 +505,7 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
     if (r <= 0 || k != r * num_bands) return out;
 
     std::vector<pair_t> all_pairs;
-#ifdef _OPENMP
+// #ifdef _OPENMP
     #pragma omp parallel
     {
         std::vector<pair_t> my_pairs;
@@ -547,42 +547,42 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
         #pragma omp critical
         all_pairs.insert(all_pairs.end(), my_pairs.begin(), my_pairs.end());
     }
-#else
-    for (int band = 0; band < num_bands; ++band) {
-        std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
-        const int offset = band * r;
+// #else
+//     for (int band = 0; band < num_bands; ++band) {
+//         std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
+//         const int offset = band * r;
 
-        for (size_t row = 0; row < num_rows; ++row) {
-            const std::vector<uint64_t> &sig = signatures[row];
-            if (sig.size() < static_cast<size_t>(offset + r)) continue;
-            uint64_t bh = band_hash(sig.data() + offset, r);
-            buckets[bh].push_back(static_cast<IndexType>(row));
-        }
+//         for (size_t row = 0; row < num_rows; ++row) {
+//             const std::vector<uint64_t> &sig = signatures[row];
+//             if (sig.size() < static_cast<size_t>(offset + r)) continue;
+//             uint64_t bh = band_hash(sig.data() + offset, r);
+//             buckets[bh].push_back(static_cast<IndexType>(row));
+//         }
 
-        for (const auto &kv : buckets) {
-            const std::vector<IndexType> &rows = kv.second;
-            if (rows.size() <= k_bucket_size_limit) {
-                for (size_t a = 0; a < rows.size(); ++a) {
-                    for (size_t b = a + 1; b < rows.size(); ++b) {
-                        IndexType i = rows[a], j = rows[b];
-                        if (i > j) std::swap(i, j);
-                        all_pairs.push_back(std::make_pair(i, j));
-                    }
-                }
-            } else {
-                for (size_t a = 0; a < rows.size(); ++a) {
-                    size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
-                    if (b_end > rows.size()) b_end = rows.size();
-                    for (size_t b = a + 1; b < b_end; ++b) {
-                        IndexType i = rows[a], j = rows[b];
-                        if (i > j) std::swap(i, j);
-                        all_pairs.push_back(std::make_pair(i, j));
-                    }
-                }
-            }
-        }
-    }
-#endif
+//         for (const auto &kv : buckets) {
+//             const std::vector<IndexType> &rows = kv.second;
+//             if (rows.size() <= k_bucket_size_limit) {
+//                 for (size_t a = 0; a < rows.size(); ++a) {
+//                     for (size_t b = a + 1; b < rows.size(); ++b) {
+//                         IndexType i = rows[a], j = rows[b];
+//                         if (i > j) std::swap(i, j);
+//                         all_pairs.push_back(std::make_pair(i, j));
+//                     }
+//                 }
+//             } else {
+//                 for (size_t a = 0; a < rows.size(); ++a) {
+//                     size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+//                     if (b_end > rows.size()) b_end = rows.size();
+//                     for (size_t b = a + 1; b < b_end; ++b) {
+//                         IndexType i = rows[a], j = rows[b];
+//                         if (i > j) std::swap(i, j);
+//                         all_pairs.push_back(std::make_pair(i, j));
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// #endif
 
     // Deduplicate: same (i,j) can appear in multiple bands
     lsh_internal::parallel_sort_pairs(all_pairs.begin(), all_pairs.end());
