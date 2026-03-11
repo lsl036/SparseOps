@@ -30,12 +30,8 @@ while IFS= read -r name || [[ -n "$name" ]]; do
   A="/data/suitesparse_collection/$name/$name.mtx"
   B="/data/suitesparse_collection/$name/$name.mtx"
   # AAt
-  # CAND="/data2/linshengle_data/SpGEMM-Reordering/close_pairs/$name.mtx"
-  # Graph Partition
-  CAND="/data2/linshengle_data/SpGEMM-Reordering/gp_order/$name.mtx"
-  # Hypergraph Partition
-  # CAND="/data2/linshengle_data/SpGEMM-Reordering/hp_order/$name.mtx"
-  
+  CAND="/data2/linshengle_data/SpGEMM-Reordering/close_pairs/$name.mtx"
+    
   if [[ ! -f "$A" ]]; then
     echo "Skip $name: A not found $A"
     continue
