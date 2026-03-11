@@ -465,6 +465,7 @@ std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_v
         IndexType ii = all_pairs[idx].first, jj = all_pairs[idx].second;
         result[idx].i = ii;
         result[idx].j = jj;
+        // // maybe pre-calculate the similarityscore here
         result[idx].score = static_cast<ValueType>(minhash_estimated_jaccard(
             sigs + static_cast<size_t>(ii) * static_cast<size_t>(k),
             sigs + static_cast<size_t>(jj) * static_cast<size_t>(k), k));

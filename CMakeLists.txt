@@ -143,6 +143,7 @@ endif()
 # Conditionally exclude MKL test files
 if(NOT ENABLE_MKL)
     list(FILTER TEST_SOURCES EXCLUDE REGEX ".*baseline_mkl_csr\\.cpp$")
+    list(FILTER TEST_SOURCES EXCLUDE REGEX ".*baseline_mkl_spgemm\\.cpp$")
 endif()
 
 # Allow the test executables to find the library headers
@@ -157,16 +158,14 @@ foreach(test_src ${TEST_SOURCES})
 
   # target_link_libraries(${test_name} SpOps_shared stdc++)
   
-  # Check if the current source file is the baseline MKL test
-  if(${test_name} STREQUAL "baseline_mkl_csr")
+  # Check if the current source file is an MKL baseline test (SpMV or SpGEMM)
+  if(${test_name} STREQUAL "baseline_mkl_csr" OR ${test_name} STREQUAL "baseline_mkl_spgemm")
     # Link with MKL. The method to link may depend on your setup.
-    # This example assumes you're using the Intel Compiler or you have MKL setup to integrate with CMake.
     if(ENABLE_MKL)
       find_package(MKL CONFIG REQUIRED)
       target_link_libraries(${test_name} MKL::MKL SpOps_shared stdc++)
     else()
-      message(WARNING "baseline_mkl_csr test requires ENABLE_MKL=ON, skipping...")
-      # This should not happen as we already filtered it out, but just in case
+      message(WARNING "${test_name} requires ENABLE_MKL=ON, skipping...")
       target_link_libraries(${test_name} SpOps_shared stdc++)
     endif()
   else()

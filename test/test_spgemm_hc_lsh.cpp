@@ -141,11 +141,13 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
         LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
     else
         LeSpGEMM_VLength<false, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
-    if (kernel_flag == 3) {
+    if (kernel_flag == 3) 
+    {
     cout << "[mixed_acc] dense clusters: " << C_cluster.dense_cluster_count
               << " / " << C_cluster.rows
               << " (" << (100.0 * C_cluster.dense_cluster_count / C_cluster.rows) << "%)"
-              << std::endl;}
+              << std::endl;
+    }
     delete_vlength_cluster_matrix(C_cluster);
 
     double total_ms = 0.0;
@@ -326,7 +328,7 @@ void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path
         delete_array(C_cluster.min_ccol);
         delete_array(C_cluster.max_ccol);
     }
-    cout << "Result (original row order) written to: " << out_path << endl;
+    // cout << "Result (original row order) written to: " << out_path << endl;
     cout << "Correctness test done." << endl;
 }
 
