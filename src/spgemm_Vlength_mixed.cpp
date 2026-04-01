@@ -286,6 +286,10 @@ IndexType classify_clusters(
         if (nz == 0) continue;
 
         IndexType col_range = max_ccol[i] - min_ccol[i] + 1;
+        // IndexType block_cells = col_range * cluster_sz[i];
+        // double density = (block_cells > 0)
+        //     ? (static_cast<double>(nz) / static_cast<double>(block_cells))
+        //     : 0.0;
         double density = static_cast<double>(nz) / static_cast<double>(col_range);
 
         IndexType num_acols = arpt[i + 1] - arpt[i];
@@ -293,10 +297,17 @@ IndexType classify_clusters(
             static_cast<double>(num_acols) * B_rowdense * static_cast<double>(bytes_per_B_entry));
         size_t dense_bytes = static_cast<size_t>(col_range) * static_cast<size_t>(cluster_sz[i]) * sizeof(ValueType);
 
+        // Best control density and L2 budget
         if ((B_access_bytes + dense_bytes) <= L2_budget && density >= density_threshold) {
             acc_flag[i] = 1;
             dense_count++;
         }
+
+        // only count density >= 0.50
+        // if (density >= 0.50) {
+        //     acc_flag[i] = 1;
+        //     dense_count++;
+        // }
 
         // too loose to control density
         // if ((B_access_bytes + dense_bytes) <= L2_budget ) {

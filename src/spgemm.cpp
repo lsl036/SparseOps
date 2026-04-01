@@ -16,6 +16,7 @@
 #include "../include/sparse_conversion.h"
 #include "../include/sparse_operation.h"
 #include <cassert>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -546,6 +547,18 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
                         CSR_VlengthCluster<IndexType, ValueType> &C_cluster,
                         double l2_fraction)
 {
+    using clock = std::chrono::high_resolution_clock;
+    auto elapsed_ms = [](clock::time_point t0, clock::time_point t1) -> double {
+        return std::chrono::duration<double, std::milli>(t1 - t0).count();
+    };
+
+    C_cluster.mixed_acc_setup_ms = 0.0;
+    C_cluster.mixed_acc_malloc_ms = 0.0;
+    C_cluster.mixed_acc_symbolic_ms = 0.0;
+    C_cluster.mixed_acc_dispatcher_ms = 0.0;
+    C_cluster.mixed_acc_numeric_ms = 0.0;
+
+    auto t_phase0 = clock::now();
     SpGEMM_BIN_VlengthCluster<IndexType, ValueType> *bin =
         new SpGEMM_BIN_VlengthCluster<IndexType, ValueType>(A_cluster.rows, MIN_HT_S, A_cluster.cluster_sz);
 
@@ -561,12 +574,17 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
     const IndexType *brpt = B.row_offset;
     const IndexType *bcol = B.col_index;
     const ValueType *bval = B.values;
+    auto t_after_setup = clock::now();
+    C_cluster.mixed_acc_setup_ms = elapsed_ms(t_phase0, t_after_setup);
 
+    auto t_malloc_a = clock::now();
     bin->set_max_bin(A_cluster.rowptr, A_cluster.colids, brpt, C_cluster.cols);
     bin->create_local_hash_table(C_cluster.cols);
 
     C_cluster.rowptr = new_array<IndexType>(C_cluster.rows + 1);
     C_cluster.rowptr_val = new_array<IndexType>(C_cluster.rows + 1);
+    auto t_after_malloc_a = clock::now();
+    const double malloc_part1_ms = elapsed_ms(t_malloc_a, t_after_malloc_a);
 
     // if (!C_cluster.min_ccol)
     //     C_cluster.min_ccol = new_array<IndexType>(C_cluster.rows);
@@ -574,6 +592,7 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
     //     C_cluster.max_ccol = new_array<IndexType>(C_cluster.rows);
 
     /* ---- Symbolic: hash-based, additionally records min/max C-column ---- */
+    auto t_sym = clock::now();
     spgemm_mixed_symbolic_omp_lb<IndexType, ValueType>(
         A_cluster.rowptr, A_cluster.colids, brpt, bcol,
         C_cluster.rows,
@@ -582,13 +601,18 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
         C_cluster.min_ccol, C_cluster.max_ccol, bin);
 
     bin->set_bin_id(C_cluster.cols, bin->min_ht_size);
+    auto t_after_sym = clock::now();
+    C_cluster.mixed_acc_symbolic_ms = elapsed_ms(t_sym, t_after_sym);
 
     /* ---- Classify: hash vs. dense per cluster ---- */
+    auto t_disp = clock::now();
     double B_rowdense = static_cast<double>(B.num_nnzs) / static_cast<double>(B.num_rows);
     /* L2 is per-CPU (not shared across cores); use total L2 size as budget (no division by core count). */
     // 为了验证 L2，扩大到 1.0～2.0 应该出现性能下降
     double l2_frac = (l2_fraction >= 0.0 && l2_fraction <= 2.0) ? l2_fraction : static_cast<double>(MIXED_L2_FRACTION);
-    size_t L2_budget = static_cast<size_t>(static_cast<double>(CPU_L2CACHE_SIZE/CPU_CORES_PER_SOC/CPU_SOCKET) * l2_frac);
+    // size_t L2_budget = static_cast<size_t>(static_cast<double>(CPU_L2CACHE_SIZE/CPU_CORES_PER_SOC/CPU_SOCKET) * l2_frac);
+    size_t L2_budget = static_cast<size_t>(static_cast<double>(CPU_L2CACHE_SIZE) * l2_frac);
+
 
     // if (!C_cluster.acc_flag)
     //     C_cluster.acc_flag = new_array<char>(C_cluster.rows);
@@ -596,15 +620,21 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
         A_cluster.rowptr, bin->cluster_nz, A_cluster.cluster_sz,
         C_cluster.min_ccol, C_cluster.max_ccol, C_cluster.rows,
         B_rowdense, L2_budget, MIXED_DENSITY_THRESHOLD, C_cluster.acc_flag);
+    auto t_after_disp = clock::now();
+    C_cluster.mixed_acc_dispatcher_ms = elapsed_ms(t_disp, t_after_disp);
 
+    auto t_malloc_b = clock::now();
     bin->create_tls_dense_buffers_for_dense_threads(
         C_cluster.acc_flag, C_cluster.min_ccol, C_cluster.max_ccol, C_cluster.cluster_sz);
 
     /* ---- Allocate output arrays ---- */
     C_cluster.colids = new_array<IndexType>(C_cluster.nnzc);
     C_cluster.values = new_array<ValueType>(C_cluster.nnzv);
+    auto t_after_malloc_b = clock::now();
+    C_cluster.mixed_acc_malloc_ms = malloc_part1_ms + elapsed_ms(t_malloc_b, t_after_malloc_b);
 
     /* ---- Numeric: per-cluster hash or dense ---- */
+    auto t_num = clock::now();
     spgemm_mixed_numeric_omp_lb<sortOutput, IndexType, ValueType>(
         A_cluster.rowptr, A_cluster.rowptr_val, A_cluster.colids, A_cluster.values,
         brpt, bcol, bval,
@@ -612,6 +642,8 @@ void LeSpGEMM_mixed_acc(const CSR_VlengthCluster<IndexType, ValueType> &A_cluste
         C_cluster.rowptr, C_cluster.rowptr_val,
         C_cluster.colids, C_cluster.values, bin, C_cluster.nnzc, C_cluster.cluster_sz,
         C_cluster.min_ccol, C_cluster.max_ccol, C_cluster.acc_flag);
+    auto t_after_num = clock::now();
+    C_cluster.mixed_acc_numeric_ms = elapsed_ms(t_num, t_after_num);
 
     C_cluster.num_rows = C_cluster.csr_rows;
     C_cluster.num_cols = C_cluster.cols;

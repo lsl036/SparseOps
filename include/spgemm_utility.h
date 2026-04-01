@@ -488,18 +488,18 @@ inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
         IndexType j = s.second.second;
         if (i >= num_rows || j >= num_rows) continue;
 
-        if (clusters[i] == i && clusters[j] == j) {
+        if (clusters[i] == i && clusters[j] == j) {  // i 和 j 都是簇的代表（根节点）
             if (!valid[i] || !valid[j]) continue;
             nclusters--;
             if (sz[i] < sz[j]) {
-                clusters[i] = j;
+                clusters[i] = j;        // i 所在的簇指向 j，j 成为新的父节点/根
                 sz[j] += sz[i];
                 if (sz[j] >= cluster_size) {
                     valid[j] = 0;
                     nclusters--;
                 }
             } else {
-                clusters[j] = i;
+                clusters[j] = i;        // j 所在的簇指向 i，i 成为新的父节点/根
                 sz[i] += sz[j];
                 if (sz[i] >= cluster_size) {
                     valid[i] = 0;
@@ -516,7 +516,7 @@ inline std::map<IndexType, std::vector<IndexType>> hierarchical_clustering_v0(
                 j = clusters[j];
             }
             if (!valid[i] || !valid[j]) continue;
-            if (i != j) {
+            if (i != j) {   // 当两个行已经属于不同簇时，计算它们代表行的精确 Jaccard 相似度，并加入优先队列
                 IndexType pi = (i < j) ? i : j, pj = (i < j) ? j : i;
                 auto p = std::make_pair(pi, pj);
                 if (close_pairs.find(p) == close_pairs.end()) {

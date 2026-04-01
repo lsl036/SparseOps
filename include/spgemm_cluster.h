@@ -134,6 +134,12 @@ struct CSR_VlengthCluster : public Matrix_Features<IndexType>
     char *acc_flag = NULL;          // Optional: hash(0) vs dense(1) per cluster for mixed-accumulator kernel (length: rows); NULL if unused
     IndexType *min_ccol = NULL;     // Optional: min column index per cluster for mixed-accumulator kernel (length: rows); NULL if unused
     IndexType *max_ccol = NULL;     // Optional: max column index per cluster for mixed-accumulator kernel (length: rows); NULL if unused
+    /** LeSpGEMM_mixed_acc phase breakdown (milliseconds); set by kernel 3 only, else left 0. */
+    double mixed_acc_setup_ms = 0.0;
+    double mixed_acc_malloc_ms = 0.0;
+    double mixed_acc_symbolic_ms = 0.0;
+    double mixed_acc_dispatcher_ms = 0.0;
+    double mixed_acc_numeric_ms = 0.0;
 };
 
 /**

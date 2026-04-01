@@ -4,7 +4,8 @@ Run test_spgemm_hc_lsh for each line in a dataset list file.
 Each line: dataset_name  k  bands  [optional rest ignored]
 Command: test_spgemm_hc_lsh BASE/name/name.mtx BASE/name/name.mtx --k=k --bands=bands --hc_v=0 --kernel=3
 OMP: OMP_PLACES=cores, OMP_PROC_BIND=spread. No timeout.
-Writes CSV: mtxname,k,bands,r,genPairs_time,HC_time,Format_Conversion_time,LeSpGEMM_VLength_time,mixed_acc,error
+Writes CSV: mtxname,k,bands,r,genPairs_time,HC_time,Format_Conversion_time,LeSpGEMM_VLength_time,mixed_acc,phase_breakdown_avg,error
+  With --print-bd, program prints [mixed_acc] phase breakdown avg ... (warmup breakdown is never printed).
 
 Usage:
   # From build dir, list file at project root
@@ -42,8 +43,16 @@ def parse_run_output(text: str):
     if not m:
         return None
     out["LeSpGEMM_VLength_time"] = float(m.group(1))
-    m = re.search(r"\[mixed_acc\]\s*(.+)", text)
-    out["mixed_acc"] = m.group(1).strip() if m else ""
+    # First [mixed_acc] line is dense clusters; optional second line is phase breakdown avg
+    mixed_lines = re.findall(r"\[mixed_acc\][^\n]*", text)
+    out["mixed_acc"] = mixed_lines[0].replace("[mixed_acc]", "").strip() if mixed_lines else ""
+    out["phase_breakdown_avg"] = ""
+    for line in mixed_lines:
+        if "phase breakdown avg" in line:
+            m_bd = re.search(r"phase breakdown avg over \d+ runs \(ms\):\s*(.+)", line)
+            if m_bd:
+                out["phase_breakdown_avg"] = m_bd.group(1).strip()
+            break
     return out
 
 
@@ -74,6 +83,11 @@ def main():
         "-c", "--csv",
         metavar="FILE",
         help="Write results to CSV (default: <list_file_stem>_results.csv)",
+    )
+    parser.add_argument(
+        "--print-bd",
+        action="store_true",
+        help="Pass --print_bd=1 to binary (kernel=3): print avg phase breakdown over iterations only",
     )
     args = parser.parse_args()
 
@@ -107,7 +121,7 @@ def main():
     fieldnames = [
         "mtxname", "k", "bands", "r",
         "genPairs_time", "HC_time", "Format_Conversion_time", "LeSpGEMM_VLength_time",
-        "mixed_acc", "error",
+        "mixed_acc", "phase_breakdown_avg", "error",
     ]
     csv_file = open(csv_path, "w", newline="", encoding="utf-8")
     csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
@@ -133,7 +147,7 @@ def main():
                 csv_writer.writerow({
                     "mtxname": name, "k": k, "bands": bands, "r": r,
                     "genPairs_time": "", "HC_time": "", "Format_Conversion_time": "", "LeSpGEMM_VLength_time": "",
-                    "mixed_acc": "", "error": "matrix not found",
+                    "mixed_acc": "", "phase_breakdown_avg": "", "error": "matrix not found",
                 })
                 csv_file.flush()
                 continue
@@ -147,12 +161,14 @@ def main():
                 "--hc_v=0",
                 "--kernel=3",
             ]
+            if args.print_bd:
+                cmd.append("--print_bd=1")
             print(f"[{i}/{len(lines)}] Run {name} k={k} bands={bands} ...", flush=True)
             total += 1
             row = {
                 "mtxname": name, "k": k, "bands": bands, "r": r,
                 "genPairs_time": "", "HC_time": "", "Format_Conversion_time": "", "LeSpGEMM_VLength_time": "",
-                "mixed_acc": "", "error": "",
+                "mixed_acc": "", "phase_breakdown_avg": "", "error": "",
             }
             try:
                 result = subprocess.run(
@@ -186,6 +202,7 @@ def main():
                         row["Format_Conversion_time"] = parsed["Format_Conversion_time"]
                         row["LeSpGEMM_VLength_time"] = parsed["LeSpGEMM_VLength_time"]
                         row["mixed_acc"] = parsed.get("mixed_acc", "")
+                        row["phase_breakdown_avg"] = parsed.get("phase_breakdown_avg", "")
                         print(f"  OK", flush=True)
                     else:
                         row["error"] = "parse_failed"
