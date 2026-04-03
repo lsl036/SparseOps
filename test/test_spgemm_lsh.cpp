@@ -108,13 +108,18 @@ void run_spgemm_lsh(const char *matA_path, const char *matB_path, const std::str
     long long int flops = get_spgemm_flop(A_csr, B);
     cout << "FLOPs: " << flops << endl;
 
-    cout << "Reordering A by permutation..." << endl;
-    CSR_Matrix<IndexType, ValueType> A_reordered = csr_reorder_rows<IndexType, ValueType>(A_csr, permutation);
-    delete_host_matrix(A_csr);
-
-    cout << "Clusters: " << (offsets.size() - 1) << endl;
     cout << "Converting A to CSR_VlengthCluster..." << endl;
+    anonymouslib_timer timer;
+    timer.start();
+    CSR_Matrix<IndexType, ValueType> A_reordered = csr_reorder_rows<IndexType, ValueType>(A_csr, permutation);
     CSR_VlengthCluster<IndexType, ValueType> A_cluster = csr_to_vlength_cluster<IndexType, ValueType>(A_reordered, offsets);
+    double t_convert_ms = timer.stop();
+    cout << "Format Conversion time: " << t_convert_ms << " ms" << endl;
+    
+    cout << "Clusters: " << (offsets.size() - 1) << endl;
+    // cout << "Converting A to CSR_VlengthCluster..." << endl;
+    
+    delete_host_matrix(A_csr);
     delete_host_matrix(A_reordered);
     cout << "A_cluster: " << A_cluster.rows << " clusters, nnzc=" << A_cluster.nnzc << ", nnzv=" << A_cluster.nnzv << endl;
 
