@@ -40,7 +40,7 @@ static void usage(int argc, char **argv) {
     std::cout << "\t  --k            = MinHash signature length (default 64)\n";
     std::cout << "\t  --bands        = LSH bands, k % bands == 0 (default 16)\n";
     std::cout << "\t  --seed         = LSH/MinHash random seed (default 7)\n";
-    std::cout << "\t  --hc_v         = 0|1|2 (0=map LSH+v0 HC, 1=vector LSH+v1 HC, 2=vector LSH+v0 HC, default 0)\n";
+    std::cout << "\t  --hc_v         = 0|1|2 (0=map LSH+v0 HC (bucket window), 1=vector LSH+v1 HC (full bucket, no window), 2=vector LSH+v0 HC, default 0)\n";
     std::cout << "\t  --test_type    = correctness|performance (default performance)\n";
     std::cout << "\t  --print_bd     = 0|1 (kernel=3 only: print avg phase breakdown over iterations; default 0)\n";
 }
@@ -91,21 +91,22 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
         std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
             A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
         reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
-    } else if (hc_v == 2) {
-        /* vector LSH (fast) + convert to map + v0 HC (fast): shortest preprocessing. */
-        std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
-            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
-        double t_lsh_ms = timer.stop();
-        cout << "LSH candidate pairs: " << pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
-        cout << "Converting pairs to map, then hierarchical clustering (cluster_size=" << cluster_size << ") [v0]..." << endl;
-        timer.start();
-        std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = candidate_pairs_vector_to_map<IndexType, ValueType>(pairs);
-        std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
-            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
-        reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
+    // } else if (hc_v == 2) {
+    //     /* vector LSH (fast) + convert to map + v0 HC (fast): shortest preprocessing. */
+    //     std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
+    //         A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+    //     double t_lsh_ms = timer.stop();
+    //     cout << "LSH candidate pairs: " << pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
+    //     cout << "Converting pairs to map, then hierarchical clustering (cluster_size=" << cluster_size << ") [v0]..." << endl;
+    //     timer.start();
+    //     std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = candidate_pairs_vector_to_map<IndexType, ValueType>(pairs);
+    //     std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
+    //         A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
+    //     reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
     } else {
+        /* hc_v==1: full intra-bucket pairing (no k_window_pairs cap) for fair preprocess-time vs hc_v==0. */
         std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
-            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed, /*constrain_large_buckets=*/false);
         double t_lsh_ms = timer.stop();
         cout << "LSH candidate pairs: " << pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
         cout << "Hierarchical clustering (cluster_size=" << cluster_size << ") [v1]..." << endl;
@@ -256,7 +257,7 @@ void test_spgemm_hc_lsh_correctness(const char *matA_path, const char *matB_path
         reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
     } else {
         std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
-            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed, /*constrain_large_buckets=*/false);
         cout << "LSH candidate pairs: " << pairs.size() << endl;
         cout << "Hierarchical clustering (cluster_size=" << cluster_size << ") [v1]..." << endl;
         hierarchical_clustering_v1<IndexType, ValueType>(

@@ -242,6 +242,37 @@ constexpr size_t k_bucket_size_limit = 256;
 /** When bucket is over limit, each row pairs with at most this many following rows. */
 constexpr int k_window_pairs = 16;
 
+/**
+ * Emit candidate pairs for one LSH bucket: either full O(n^2) within bucket, or window-limited when
+ * constrain_large_buckets is true and bucket size exceeds k_bucket_size_limit.
+ */
+template <typename IndexType, typename Vec>
+inline void lsh_emit_pairs_for_bucket(
+    Vec &out,
+    const std::vector<IndexType> &rows,
+    bool constrain_large_buckets)
+{
+    if (!constrain_large_buckets || rows.size() <= k_bucket_size_limit) {
+        for (size_t a = 0; a < rows.size(); ++a) {
+            for (size_t b = a + 1; b < rows.size(); ++b) {
+                IndexType i = rows[a], j = rows[b];
+                if (i > j) std::swap(i, j);
+                out.push_back(std::make_pair(i, j));
+            }
+        }
+        return;
+    }
+    for (size_t a = 0; a < rows.size(); ++a) {
+        size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+        if (b_end > rows.size()) b_end = rows.size();
+        for (size_t b = a + 1; b < b_end; ++b) {
+            IndexType i = rows[a], j = rows[b];
+            if (i > j) std::swap(i, j);
+            out.push_back(std::make_pair(i, j));
+        }
+    }
+}
+
 /** Hash a band of r MinHash values to a bucket id. */
 inline uint64_t band_hash(const uint64_t *band_sig, int r) {
     const uint64_t mul = 0x9e3779b97f4a7c15ULL;
@@ -371,7 +402,8 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
 /** Vector-based LSH on flat signatures: returns compact array, uses parallel sort, no map. */
 template <typename IndexType, typename ValueType>
 std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_vector(
-    const uint64_t *sigs, size_t num_rows, int k, int num_bands)
+    const uint64_t *sigs, size_t num_rows, int k, int num_bands,
+    bool constrain_large_buckets = true)
 {
     using pair_t = std::pair<IndexType, IndexType>;
     std::vector<CandidatePair<IndexType, ValueType>> result;
@@ -394,26 +426,7 @@ std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_v
                 buckets[bh].push_back(static_cast<IndexType>(row));
             }
             for (const auto &kv : buckets) {
-                const std::vector<IndexType> &rows = kv.second;
-                if (rows.size() <= k_bucket_size_limit) {
-                    for (size_t a = 0; a < rows.size(); ++a) {
-                        for (size_t b = a + 1; b < rows.size(); ++b) {
-                            IndexType i = rows[a], j = rows[b];
-                            if (i > j) std::swap(i, j);
-                            my_pairs.push_back(std::make_pair(i, j));
-                        }
-                    }
-                } else {
-                    for (size_t a = 0; a < rows.size(); ++a) {
-                        size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
-                        if (b_end > rows.size()) b_end = rows.size();
-                        for (size_t b = a + 1; b < b_end; ++b) {
-                            IndexType i = rows[a], j = rows[b];
-                            if (i > j) std::swap(i, j);
-                            my_pairs.push_back(std::make_pair(i, j));
-                        }
-                    }
-                }
+                lsh_emit_pairs_for_bucket<IndexType>(my_pairs, kv.second, constrain_large_buckets);
             }
         }
         #pragma omp critical
@@ -429,26 +442,7 @@ std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_v
             buckets[bh].push_back(static_cast<IndexType>(row));
         }
         for (const auto &kv : buckets) {
-            const std::vector<IndexType> &rows = kv.second;
-            if (rows.size() <= k_bucket_size_limit) {
-                for (size_t a = 0; a < rows.size(); ++a) {
-                    for (size_t b = a + 1; b < rows.size(); ++b) {
-                        IndexType i = rows[a], j = rows[b];
-                        if (i > j) std::swap(i, j);
-                        all_pairs.push_back(std::make_pair(i, j));
-                    }
-                }
-            } else {
-                for (size_t a = 0; a < rows.size(); ++a) {
-                    size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
-                    if (b_end > rows.size()) b_end = rows.size();
-                    for (size_t b = a + 1; b < b_end; ++b) {
-                        IndexType i = rows[a], j = rows[b];
-                        if (i > j) std::swap(i, j);
-                        all_pairs.push_back(std::make_pair(i, j));
-                    }
-                }
-            }
+            lsh_emit_pairs_for_bucket<IndexType>(all_pairs, kv.second, constrain_large_buckets);
         }
     }
 #endif
@@ -640,6 +634,8 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs(
 /**
  * @brief LSH candidate pairs from CSR: returns vector of CandidatePair (i, j, score).
  *        Uses parallel sort when available; no std::map for better cache/memory.
+ * @param constrain_large_buckets If true (default), large buckets use k_window_pairs sampling;
+ *        if false, emit all pairs within each bucket (full LSH, no window cap).
  */
 template <typename IndexType, typename ValueType>
 std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_vector(
@@ -648,12 +644,13 @@ std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_vector(
     IndexType num_rows,
     int k,
     int num_bands,
-    uint64_t seed = 12345)
+    uint64_t seed = 12345,
+    bool constrain_large_buckets = true)
 {
     std::vector<uint64_t> sigs = minhash_signatures_flat<IndexType>(
         rowptr, col_index, num_rows, k, seed);
     return lsh_internal::lsh_candidate_pairs_from_flat_vector<IndexType, ValueType>(
-        sigs.data(), static_cast<size_t>(num_rows), k, num_bands);
+        sigs.data(), static_cast<size_t>(num_rows), k, num_bands, constrain_large_buckets);
 }
 
 /**
