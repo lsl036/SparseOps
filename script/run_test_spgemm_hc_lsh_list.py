@@ -13,6 +13,9 @@ Usage:
 
   # With results CSV (default: <list_file_stem>_results.csv)
   python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt -c run_results.csv
+
+  # With hierarchical clustering v1
+  python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --hc_v=1 -c run_results_hc_v1.csv
 """
 
 import argparse
@@ -89,6 +92,11 @@ def main():
         action="store_true",
         help="Pass --print_bd=1 to binary (kernel=3): print avg phase breakdown over iterations only",
     )
+    parser.add_argument(
+        "--hc_v",
+        default=0,
+        help="Pass --hc_v=1 to binary (kernel=3): use hierarchical clustering v1",
+    )
     args = parser.parse_args()
 
     list_path = Path(args.list_file)
@@ -158,9 +166,13 @@ def main():
                 mtx,
                 f"--k={k}",
                 f"--bands={bands}",
-                "--hc_v=0",
+                # "--hc_v=0",
                 "--kernel=3",
             ]
+            if args.hc_v == 1:
+                cmd.append("--hc_v=1")
+            else:
+                cmd.append("--hc_v=0")
             if args.print_bd:
                 cmd.append("--print_bd=1")
             print(f"[{i}/{len(lines)}] Run {name} k={k} bands={bands} ...", flush=True)

@@ -91,18 +91,18 @@ void test_spgemm_hc_lsh_performance(const char *matA_path, const char *matB_path
         std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
             A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
         reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
-    // } else if (hc_v == 2) {
-    //     /* vector LSH (fast) + convert to map + v0 HC (fast): shortest preprocessing. */
-    //     std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
-    //         A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
-    //     double t_lsh_ms = timer.stop();
-    //     cout << "LSH candidate pairs: " << pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
-    //     cout << "Converting pairs to map, then hierarchical clustering (cluster_size=" << cluster_size << ") [v0]..." << endl;
-    //     timer.start();
-    //     std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = candidate_pairs_vector_to_map<IndexType, ValueType>(pairs);
-    //     std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
-    //         A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
-    //     reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
+    } else if (hc_v == 2) {
+        /* vector LSH (fast) + convert to map + v0 HC (fast): shortest preprocessing. */
+        std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
+            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+        double t_lsh_ms = timer.stop();
+        cout << "LSH candidate pairs: " << pairs.size() << " (genPairs time: " << t_lsh_ms << " ms)" << endl;
+        cout << "Converting pairs to map, then hierarchical clustering (cluster_size=" << cluster_size << ") [v0]..." << endl;
+        timer.start();
+        std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = candidate_pairs_vector_to_map<IndexType, ValueType>(pairs);
+        std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
+            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
+        reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
     } else {
         /* hc_v==1: full intra-bucket pairing (no k_window_pairs cap) for fair preprocess-time vs hc_v==0. */
         std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
