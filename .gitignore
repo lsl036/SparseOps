@@ -19,3 +19,7 @@ script/*.csv
 *.csv
 *.perm
 *.offsets
+
+# data/: track download script only; ignore downloaded SuiteSparse / matrix files
+data/*
+!data/download_datasets.py
