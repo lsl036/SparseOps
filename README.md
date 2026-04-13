@@ -27,6 +27,7 @@ This library is designed for different platforms. It can auto-detect the hardwar
 Typically, SSpMV library is easy to install. Please follow the steps:
 ```
 cd SparseOps
+sh detect_plat.sh
 mkdir build && cd build
 cmake ..
 make
@@ -44,25 +45,34 @@ Then you will get some test routines of different SpMV algorithms. If some compi
 - SELL-c- $\sigma$ : Sliced ELL format with $\sigma$ slice for reordering. **Parameters: chunk width C, slice width $\sigma$**.
 - SELL-c-R : Here the $\sigma=R$, reorder the whole matrix rows without sliced tiles.
 
-### Test Correctness of SpGEMM
+# SubModule 2: Locality-enhanced SpGEMM (LeSpGEMM)
 
-- Row-wise SpGEMM kernels:
-
-Finished make all stuffs:
-``` 
-python3 run_rowwise_spgemm.py --kernel=1 (1, 2 for different row-wise kernels)
+## Compilation and Installation
+Typically, LeSpGEMM library is easy to install. Please follow the steps:
 ```
-Then the C matrix will be writte，then you can run (the correct results should be stored in `script/`):
+cd SparseOps
+sh detect_plat.sh
+mkdir build && cd build
+cmake ..
+make
 ```
-python3 ../script/compare_results_rowwise.py --kernel=1 (1, 2 corresponding above)
+LeSpGEMM and SSpMV will be compiled and installed together. If some compiling errors occur, please see CMakeLists.txt for compiling details.
+
+## Test Routines
+Run LeSpGEMM by:
 ```
-
-- Fixed-lengrh Cluster SpGEMM kernels:
-
-1-hash kernel ; 2-array kernel. 
-``` 
-python3 run_fcluster_spgemm.py --kernel=1 (1, 2)
-
-python3 ../script/compare_results_flength.py --kernel=1 (1, 2)
+./test_spgemm_hc_lsh /path/to/matrixA /path/to/matrixB --kernel=3 --threads=64
 ```
+Some important options:
+- **kernel**: 1 (Hash VLength), 2 (Array VLength), or 3 (Hybrid-Accumulator, default 1). For LeSpGEMM, we should using `--kernel=3`;
+- **cluster_size**: max cluster size (default 8);
+- **threads**: number of OMP threads (default all threads activated);
+- **hc_v**: support 0 , 1 ,or 2  
+(0 = C-LSH+v0 Hierarchical Clustering (bucket constrained window); 
+    1 = naive LSH + v1_HC (full bucket, no window); 
+    2 = naive LSH + v0_HC , default 0 for LeSpGEMM)
 
+For more options information, run by:
+```
+./test_spgemm_hc_lsh --help
+```
