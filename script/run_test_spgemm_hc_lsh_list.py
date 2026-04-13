@@ -2,20 +2,34 @@
 """
 Run test_spgemm_hc_lsh for each line in a dataset list file.
 Each line: dataset_name  k  bands  [optional rest ignored]
-Command: test_spgemm_hc_lsh BASE/name/name.mtx BASE/name/name.mtx --k=k --bands=bands --hc_v=0 --kernel=3
+Command: test_spgemm_hc_lsh BASE/name/name.mtx BASE/name/name.mtx --k=k --bands=bands --hc_v=0 --kernel=...
 OMP: OMP_PLACES=cores, OMP_PROC_BIND=spread. No timeout.
-Writes CSV: mtxname,k,bands,r,genPairs_time,HC_time,Format_Conversion_time,LeSpGEMM_VLength_time,mixed_acc,phase_breakdown_avg,error
+Writes CSV: mtxname,k,bands,r,kernel,genPairs_time,HC_time,Format_Conversion_time,LeSpGEMM_VLength_time,mixed_acc,phase_breakdown_avg,error
   With --print-bd, program prints [mixed_acc] phase breakdown avg ... (warmup breakdown is never printed).
+
+Threads:
+  Optional --threads N forwards to the binary as --threads=N (OpenMP / Le_set_thread_num). If omitted,
+  the program uses its built-in default (see test_spgemm_hc_lsh main).
+
+Kernel:
+  Optional --kernel {1,2,3} is passed as --kernel= to the binary (1=Hash VLength, 2=Array VLength,
+  3=Mixed-accumulator). Default 3.
 
 Usage:
   # From build dir, list file at project root
   python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt
+
+  # With 64 OpenMP threads (passed to every run)
+  python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --threads 64
 
   # With results CSV (default: <list_file_stem>_results.csv)
   python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt -c run_results.csv
 
   # With hierarchical clustering v1
   python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --hc_v=1 -c run_results_hc_v1.csv
+
+  # Mixed-accumulator kernel (kernel 3)
+  python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --kernel 3
 """
 
 import argparse
@@ -94,8 +108,23 @@ def main():
     )
     parser.add_argument(
         "--hc_v",
+        type=int,
+        choices=(0, 1, 2),
         default=0,
-        help="Pass --hc_v=1 to binary (kernel=3): use hierarchical clustering v1",
+        help="Forwarded as --hc_v= to binary: 0 map LSH+v0 HC, 1 vector LSH+v1 HC, 2 vector LSH+v0 HC",
+    )
+    parser.add_argument(
+        "--threads",
+        default="",
+        metavar="N",
+        help="If set, append --threads=N to each binary invocation (OpenMP thread count)",
+    )
+    parser.add_argument(
+        "--kernel",
+        type=int,
+        choices=(1, 2, 3),
+        default=1,
+        help="Passed as --kernel= to binary: 1 Hash VLength, 2 Array VLength, 3 Mixed-accumulator (default 1)",
     )
     args = parser.parse_args()
 
@@ -127,7 +156,7 @@ def main():
 
     csv_path = Path(args.csv) if args.csv else list_path.parent / (list_path.stem + "_results.csv")
     fieldnames = [
-        "mtxname", "k", "bands", "r",
+        "mtxname", "k", "bands", "r", "kernel",
         "genPairs_time", "HC_time", "Format_Conversion_time", "LeSpGEMM_VLength_time",
         "mixed_acc", "phase_breakdown_avg", "error",
     ]
@@ -153,7 +182,7 @@ def main():
                 failed += 1
                 total += 1
                 csv_writer.writerow({
-                    "mtxname": name, "k": k, "bands": bands, "r": r,
+                    "mtxname": name, "k": k, "bands": bands, "r": r, "kernel": args.kernel,
                     "genPairs_time": "", "HC_time": "", "Format_Conversion_time": "", "LeSpGEMM_VLength_time": "",
                     "mixed_acc": "", "phase_breakdown_avg": "", "error": "matrix not found",
                 })
@@ -166,19 +195,17 @@ def main():
                 mtx,
                 f"--k={k}",
                 f"--bands={bands}",
-                # "--hc_v=0",
-                "--kernel=3",
+                f"--kernel={args.kernel}",
             ]
-            if args.hc_v == 1:
-                cmd.append("--hc_v=1")
-            else:
-                cmd.append("--hc_v=0")
+            cmd.append(f"--hc_v={args.hc_v}")
             if args.print_bd:
                 cmd.append("--print_bd=1")
-            print(f"[{i}/{len(lines)}] Run {name} k={k} bands={bands} ...", flush=True)
+            if args.threads:
+                cmd.append(f"--threads={args.threads}")
+            print(f"[{i}/{len(lines)}] Run {name} k={k} bands={bands} kernel={args.kernel} ...", flush=True)
             total += 1
             row = {
-                "mtxname": name, "k": k, "bands": bands, "r": r,
+                "mtxname": name, "k": k, "bands": bands, "r": r, "kernel": args.kernel,
                 "genPairs_time": "", "HC_time": "", "Format_Conversion_time": "", "LeSpGEMM_VLength_time": "",
                 "mixed_acc": "", "phase_breakdown_avg": "", "error": "",
             }

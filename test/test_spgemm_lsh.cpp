@@ -17,6 +17,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -24,7 +25,7 @@
 using namespace std;
 
 #ifndef LSH_ORDER_OUT_DIR
-#define LSH_ORDER_OUT_DIR "/data2/linshengle_data/SpGEMM-Reordering/lsh_order"
+#define LSH_ORDER_OUT_DIR "/data/linshengle_data/SpGEMM-Reordering/lsh_order"
 #endif
 
 /** Read offsets file: one IndexType per line. */
@@ -40,6 +41,140 @@ std::vector<IndexType> read_offsets_file(const char *filename) {
     while (f >> x)
         out.push_back(x);
     return out;
+}
+
+/**
+ * @brief Fast path for permutation + CSR_Vlength conversion.
+ *        This is intentionally local to this benchmark test so other tests
+ *        keep using the generic conversion path.
+ */
+template <typename IndexType, typename ValueType>
+CSR_VlengthCluster<IndexType, ValueType> csr_perm_to_vlength_cluster_fast(
+    const CSR_Matrix<IndexType, ValueType> &csr,
+    const std::vector<IndexType> &row_permutation,
+    const std::vector<IndexType> &offsets)
+{
+    if (offsets.size() < 2) {
+        throw std::invalid_argument("offsets size must be >= 2");
+    }
+    if (offsets.front() != 0 || offsets.back() != csr.num_rows) {
+        throw std::invalid_argument("offsets must start at 0 and end at csr.num_rows");
+    }
+    if (row_permutation.size() < static_cast<size_t>(csr.num_rows)) {
+        throw std::invalid_argument("row_permutation size must be >= csr.num_rows");
+    }
+
+    CSR_VlengthCluster<IndexType, ValueType> cluster;
+    cluster.csr_rows = csr.num_rows;
+    cluster.cols = csr.num_cols;
+    cluster.rows = static_cast<IndexType>(offsets.size() - 1);
+    cluster.nnzc = 0;
+    cluster.nnzv = 0;
+    cluster.max_cluster_sz = 0;
+    cluster.acc_flag = nullptr;
+    cluster.min_ccol = nullptr;
+    cluster.max_ccol = nullptr;
+    cluster.dense_cluster_count = 0;
+
+    cluster.rowptr = new_array<IndexType>(cluster.rows + 1);
+    CHECK_ALLOC(cluster.rowptr);
+    cluster.rowptr_val = new_array<IndexType>(cluster.rows + 1);
+    CHECK_ALLOC(cluster.rowptr_val);
+    cluster.cluster_sz = new_array<IndexType>(cluster.rows);
+    CHECK_ALLOC(cluster.cluster_sz);
+
+    std::vector<IndexType> work(cluster.rows, static_cast<IndexType>(0));
+    std::vector<IndexType> work_val(cluster.rows, static_cast<IndexType>(0));
+
+    // Pass-1: count unique columns per cluster without creating an intermediate reordered CSR.
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic)
+#endif
+    for (IndexType cid = 0; cid < cluster.rows; ++cid) {
+        const IndexType start_row = offsets[cid];
+        const IndexType end_row = offsets[cid + 1];
+        const IndexType csz = end_row - start_row;
+        cluster.cluster_sz[cid] = csz;
+
+        std::unordered_map<IndexType, IndexType> col2slot;
+        col2slot.reserve(static_cast<size_t>(std::max<IndexType>(csz * 16, 64)));
+
+        for (IndexType new_row = start_row; new_row < end_row; ++new_row) {
+            const IndexType original_row = row_permutation[new_row];
+            if (original_row < 0 || original_row >= csr.num_rows) continue;
+
+            for (IndexType jj = csr.row_offset[original_row]; jj < csr.row_offset[original_row + 1]; ++jj) {
+                const IndexType acol = csr.col_index[jj];
+                col2slot.emplace(acol, static_cast<IndexType>(0));
+            }
+        }
+
+        const IndexType unique_cols = static_cast<IndexType>(col2slot.size());
+        work[cid] = unique_cols;
+        work_val[cid] = unique_cols * csz;
+    }
+
+    // Prefix sums for rowptr / rowptr_val and totals.
+    cluster.rowptr[0] = 0;
+    cluster.rowptr_val[0] = 0;
+    for (IndexType cid = 0; cid < cluster.rows; ++cid) {
+        cluster.nnzc += work[cid];
+        cluster.nnzv += work_val[cid];
+        cluster.max_cluster_sz = std::max(cluster.max_cluster_sz, cluster.cluster_sz[cid]);
+        cluster.rowptr[cid + 1] = cluster.rowptr[cid] + work[cid];
+        cluster.rowptr_val[cid + 1] = cluster.rowptr_val[cid] + work_val[cid];
+    }
+
+    cluster.colids = (cluster.nnzc > 0) ? new_array<IndexType>(cluster.nnzc) : nullptr;
+    if (cluster.nnzc > 0) CHECK_ALLOC(cluster.colids);
+    cluster.values = (cluster.nnzv > 0) ? new_array<ValueType>(cluster.nnzv) : nullptr;
+    if (cluster.nnzv > 0) CHECK_ALLOC(cluster.values);
+    if (cluster.nnzv > 0) {
+        std::fill_n(cluster.values, cluster.nnzv, static_cast<ValueType>(0));
+    }
+
+    // Pass-2: fill colids + values directly in final storage.
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic)
+#endif
+    for (IndexType cid = 0; cid < cluster.rows; ++cid) {
+        const IndexType start_row = offsets[cid];
+        const IndexType end_row = offsets[cid + 1];
+        const IndexType csz = cluster.cluster_sz[cid];
+        const IndexType base_col = cluster.rowptr[cid];
+        const IndexType base_val = cluster.rowptr_val[cid];
+
+        std::unordered_map<IndexType, IndexType> col2slot;
+        col2slot.reserve(static_cast<size_t>(std::max<IndexType>(work[cid] * 2, 64)));
+        IndexType next_slot = 0;
+
+        for (IndexType new_row = start_row; new_row < end_row; ++new_row) {
+            const IndexType original_row = row_permutation[new_row];
+            if (original_row < 0 || original_row >= csr.num_rows) continue;
+            const IndexType row_in_cluster = new_row - start_row;
+
+            for (IndexType jj = csr.row_offset[original_row]; jj < csr.row_offset[original_row + 1]; ++jj) {
+                const IndexType acol = csr.col_index[jj];
+                const ValueType aval = csr.values[jj];
+
+                auto it = col2slot.find(acol);
+                IndexType slot;
+                if (it == col2slot.end()) {
+                    slot = next_slot++;
+                    col2slot.emplace(acol, slot);
+                    cluster.colids[base_col + slot] = acol;
+                } else {
+                    slot = it->second;
+                }
+                cluster.values[base_val + (slot * csz) + row_in_cluster] = aval;
+            }
+        }
+    }
+
+    cluster.num_rows = cluster.csr_rows;
+    cluster.num_cols = cluster.cols;
+    cluster.num_nnzs = cluster.nnzv;
+    return cluster;
 }
 
 static void usage(int argc, char **argv) {
@@ -111,8 +246,8 @@ void run_spgemm_lsh(const char *matA_path, const char *matB_path, const std::str
     cout << "Converting A to CSR_VlengthCluster..." << endl;
     anonymouslib_timer timer;
     timer.start();
-    CSR_Matrix<IndexType, ValueType> A_reordered = csr_reorder_rows<IndexType, ValueType>(A_csr, permutation);
-    CSR_VlengthCluster<IndexType, ValueType> A_cluster = csr_to_vlength_cluster<IndexType, ValueType>(A_reordered, offsets);
+    CSR_VlengthCluster<IndexType, ValueType> A_cluster =
+        csr_perm_to_vlength_cluster_fast<IndexType, ValueType>(A_csr, permutation, offsets);
     double t_convert_ms = timer.stop();
     cout << "Format Conversion time: " << t_convert_ms << " ms" << endl;
     
@@ -120,7 +255,6 @@ void run_spgemm_lsh(const char *matA_path, const char *matB_path, const std::str
     // cout << "Converting A to CSR_VlengthCluster..." << endl;
     
     delete_host_matrix(A_csr);
-    delete_host_matrix(A_reordered);
     cout << "A_cluster: " << A_cluster.rows << " clusters, nnzc=" << A_cluster.nnzc << ", nnzv=" << A_cluster.nnzv << endl;
 
     CSR_VlengthCluster<IndexType, ValueType> C_cluster;

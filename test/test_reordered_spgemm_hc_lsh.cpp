@@ -94,6 +94,11 @@ void run_reordered_spgemm_hc_lsh(const char *matA_path, const char *matB_path, c
     cout << "Kernel: " << kernel_flag << endl;
 
     CSR_VlengthCluster<IndexType, ValueType> C_cluster;
+    if (kernel_flag == 3) {
+        C_cluster.acc_flag = new_array<char>(A_cluster.rows);
+        C_cluster.min_ccol = new_array<IndexType>(A_cluster.rows);
+        C_cluster.max_ccol = new_array<IndexType>(A_cluster.rows);
+    }
     if (sortOutput)
         LeSpGEMM_VLength<true, IndexType, ValueType>(A_cluster, B, C_cluster, kernel_flag, l2_fraction);
     else
@@ -131,6 +136,11 @@ void run_reordered_spgemm_hc_lsh(const char *matA_path, const char *matB_path, c
     delete_vlength_cluster_matrix(C_cluster);
     delete_vlength_cluster_matrix(A_cluster);
     delete_host_matrix(B);
+    if (kernel_flag == 3) {
+        delete_array(C_cluster.acc_flag);
+        delete_array(C_cluster.min_ccol);
+        delete_array(C_cluster.max_ccol);
+    }
     cout << "Done." << endl;
 }
 

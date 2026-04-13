@@ -20,6 +20,7 @@ Usage:
 import argparse
 import csv
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -45,7 +46,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--out-dir",
-        default="/data2/linshengle_data/SpGEMM-Reordering/lsh_order",
+        default="/data/linshengle_data/SpGEMM-Reordering/lsh_order",
         help="Output dir for <name>.perm and <name>.offsets",
     )
     parser.add_argument(
@@ -74,6 +75,11 @@ def main() -> int:
         "--csv",
         metavar="FILE",
         help="Write results to CSV (default: <list_file_stem>_record_perm_results.csv)",
+    )
+    parser.add_argument(
+        "--record-maxmem",
+        action="store_true",
+        help="If set, run command with /usr/bin/time -v and record Maximum resident set size.",
     )
     args = parser.parse_args()
 
@@ -108,6 +114,7 @@ def main() -> int:
         "out_dir",
         "perm_path",
         "offsets_path",
+        "maxmem_gb",
         "exit_code",
         "error",
     ]
@@ -141,6 +148,7 @@ def main() -> int:
                 "out_dir": out_dir,
                 "perm_path": perm_path,
                 "offsets_path": offsets_path,
+                "maxmem_gb": "",
                 "exit_code": "",
                 "error": "",
             }
@@ -168,8 +176,9 @@ def main() -> int:
             print(f"[{i}/{len(lines)}] Record {name} k={k} bands={bands} ...", flush=True)
             total += 1
             try:
+                run_cmd = ["/usr/bin/time", "-v"] + cmd if args.record_maxmem else cmd
                 result = subprocess.run(
-                    cmd,
+                    run_cmd,
                     capture_output=True,
                     text=True,
                     timeout=None,
@@ -180,12 +189,18 @@ def main() -> int:
 
                 if log_file:
                     log_file.write(f"\n===== {name} k={k} bands={bands} =====\n")
-                    log_file.write("CMD: " + " ".join(cmd) + "\n")
+                    log_file.write("CMD: " + " ".join(run_cmd) + "\n")
                     log_file.write(stdout)
                     if stderr:
                         log_file.write(stderr)
                     log_file.write(f"\nExit code: {result.returncode}\n")
                     log_file.flush()
+
+                if args.record_maxmem:
+                    m = re.search(r"Maximum resident set size \(kbytes\):\s*([0-9]+)", stderr)
+                    if m:
+                        maxmem_kb = float(m.group(1))
+                        row["maxmem_gb"] = f"{(maxmem_kb / (1024.0 * 1024.0)):.6f}"
 
                 if result.returncode != 0:
                     failed += 1
@@ -198,6 +213,10 @@ def main() -> int:
                         failed += 1
                         row["error"] = "output files missing"
                         print("  FAIL: output files missing", file=sys.stderr)
+                    elif args.record_maxmem and not row["maxmem_gb"]:
+                        failed += 1
+                        row["error"] = "maxmem_parse_failed"
+                        print("  FAIL: maxmem_parse_failed", file=sys.stderr)
                     else:
                         print("  OK", flush=True)
 

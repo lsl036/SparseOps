@@ -26,13 +26,17 @@ from pathlib import Path
 
 def parse_run_output(text: str):
     out = {}
-    m = re.search(r"Average time \\(LeSpGEMM_VLength kernel=3\\):\\s*([\\d.]+)\\s*ms", text)
+    num_pat = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+
+    m = re.search(rf"Format Conversion time:\s*{num_pat}\s*ms", text)
+    out["convert_ms"] = float(m.group(1)) if m else None
+    m = re.search(rf"Average time \(LeSpGEMM_VLength kernel=3\):\s*{num_pat}\s*ms", text)
     if not m:
         return None
     out["avg_ms"] = float(m.group(1))
-    m = re.search(r"Average GFLOPS:\\s*([\\d.]+)", text)
+    m = re.search(rf"Average GFLOPS:\s*{num_pat}", text)
     out["gflops"] = float(m.group(1)) if m else None
-    m = re.search(r"\\[mixed_acc\\]\\s*dense clusters:\\s*([0-9]+)\\s*/\\s*([0-9]+)", text)
+    m = re.search(r"\[mixed_acc\]\s*dense clusters:\s*([0-9]+)\s*/\s*([0-9]+)", text)
     out["dense_clusters"] = int(m.group(1)) if m else None
     out["total_clusters"] = int(m.group(2)) if m else None
     return out
@@ -128,6 +132,7 @@ def main() -> int:
     csv_path = Path(args.csv) if args.csv else list_path.parent / (list_path.stem + "_spgemm_lsh_results.csv")
     fieldnames = [
         "mtxname", "k", "bands",
+        "convert_ms",
         "avg_ms", "gflops",
         "dense_clusters", "total_clusters",
         "error",
@@ -156,6 +161,7 @@ def main() -> int:
 
             row = {
                 "mtxname": name, "k": k, "bands": bands,
+                "convert_ms": "",
                 "avg_ms": "", "gflops": "",
                 "dense_clusters": "", "total_clusters": "",
                 "error": "",
@@ -224,6 +230,7 @@ def main() -> int:
                         row["error"] = "parse_failed"
                         print("  FAIL: parse_failed", file=sys.stderr)
                     else:
+                        row["convert_ms"] = parsed["convert_ms"] if parsed["convert_ms"] is not None else ""
                         row["avg_ms"] = parsed["avg_ms"]
                         row["gflops"] = parsed["gflops"] if parsed["gflops"] is not None else ""
                         row["dense_clusters"] = parsed["dense_clusters"] if parsed["dense_clusters"] is not None else ""

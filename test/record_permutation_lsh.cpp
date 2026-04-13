@@ -25,7 +25,7 @@
 using namespace std;
 
 #ifndef LSH_ORDER_OUT_DIR
-#define LSH_ORDER_OUT_DIR "/data2/linshengle_data/SpGEMM-Reordering/lsh_order"
+#define LSH_ORDER_OUT_DIR "/data/linshengle_data/SpGEMM-Reordering/lsh_order"
 #endif
 
 static void create_directories_if_not_exists(const std::string &path) {
@@ -109,7 +109,7 @@ void run_record(int argc, char **argv) {
         reordered_dict_to_permutation_and_offsets(reordered_dict, A_csr.num_rows, permutation, offsets);
     } else if (hc_v == 2) {
         std::vector<CandidatePair<IndexType, ValueType>> pairs = lsh_candidate_pairs_vector<IndexType, ValueType>(
-            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed);
+            A_csr.row_offset, A_csr.col_index, A_csr.num_rows, k, num_bands, seed, false); // 退化回 LSH 的原始实现
         std::map<std::pair<IndexType, IndexType>, ValueType> close_pairs = candidate_pairs_vector_to_map<IndexType, ValueType>(pairs);
         std::map<IndexType, std::vector<IndexType>> reordered_dict = hierarchical_clustering_v0<IndexType, ValueType>(
             A_csr.row_offset, A_csr.col_index, A_csr.num_rows, close_pairs, cluster_size);
