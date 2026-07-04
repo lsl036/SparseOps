@@ -399,7 +399,7 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
     return out;
 }
 
-/** Vector-based LSH on flat signatures: returns compact array, uses parallel sort, no map. */
+/** Vector-based naive LSH on flat signatures: returns compact array, uses parallel sort, no map. */
 template <typename IndexType, typename ValueType>
 std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_vector(
     const uint64_t *sigs, size_t num_rows, int k, int num_bands,
