@@ -292,6 +292,24 @@ inline void parallel_sort_pairs(It first, It last) {
 #endif
 }
 
+template <typename It, typename Compare>
+inline void parallel_sort_pairs(It first, It last, Compare comp) {
+#ifdef SPGEMM_LSH_USE_PARALLEL_SORT
+    __gnu_parallel::sort(first, last, comp);
+#else
+    std::sort(first, last, comp);
+#endif
+}
+
+template <typename IndexType>
+struct LshBandRecord {
+    uint64_t bucket;
+    IndexType row;
+    int band;
+};
+
+constexpr size_t k_flat_lsh_record_limit = 64ULL * 1024ULL * 1024ULL;
+
 /** LSH on flat signatures [row-major: row i at sigs + i*k], with parallel band loop and parallel Jaccard fill. */
 template <typename IndexType, typename ValueType>
 std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_flat(
@@ -305,9 +323,12 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
 
     std::vector<pair_t> all_pairs;
 #ifdef _OPENMP
+    const int max_threads = omp_get_max_threads();
+    std::vector<std::vector<pair_t>> thread_pairs(static_cast<size_t>(max_threads));
     #pragma omp parallel
     {
-        std::vector<pair_t> my_pairs;
+        const int tid = omp_get_thread_num();
+        std::vector<pair_t> &my_pairs = thread_pairs[static_cast<size_t>(tid)];
         #pragma omp for schedule(guided)
         for (int band = 0; band < num_bands; ++band) {
             std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
@@ -342,9 +363,12 @@ std::map<std::pair<IndexType, IndexType>, ValueType> lsh_candidate_pairs_from_fl
                 }
             }
         }
-        #pragma omp critical
-        all_pairs.insert(all_pairs.end(), my_pairs.begin(), my_pairs.end());
     }
+    size_t total_pairs = 0;
+    for (const auto &v : thread_pairs) total_pairs += v.size();
+    all_pairs.reserve(total_pairs);
+    for (const auto &v : thread_pairs)
+        all_pairs.insert(all_pairs.end(), v.begin(), v.end());
 #else
     for (int band = 0; band < num_bands; ++band) {
         std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
@@ -411,11 +435,121 @@ std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_v
     const int r = k / num_bands;
     if (r <= 0 || k != r * num_bands) return result;
 
+    const size_t record_count = num_rows * static_cast<size_t>(num_bands);
+    bool use_flat_records = (record_count <= k_flat_lsh_record_limit);
+#ifdef _OPENMP
+    use_flat_records = use_flat_records &&
+        (static_cast<size_t>(num_bands) * 4ULL < static_cast<size_t>(omp_get_max_threads()));
+#endif
+    if (use_flat_records) {
+        using record_t = LshBandRecord<IndexType>;
+        std::vector<record_t> records(record_count);
+
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(static)
+#endif
+        for (size_t idx = 0; idx < record_count; ++idx) {
+            const int band = static_cast<int>(idx / num_rows);
+            const size_t row = idx - static_cast<size_t>(band) * num_rows;
+            const int offset = band * r;
+            const uint64_t *row_sig = sigs + row * static_cast<size_t>(k);
+            records[idx].bucket = band_hash(row_sig + offset, r);
+            records[idx].row = static_cast<IndexType>(row);
+            records[idx].band = band;
+        }
+
+        parallel_sort_pairs(
+            records.begin(), records.end(),
+            [](const record_t &a, const record_t &b) {
+                if (a.band != b.band) return a.band < b.band;
+                if (a.bucket != b.bucket) return a.bucket < b.bucket;
+                return a.row < b.row;
+            });
+
+        std::vector<std::pair<size_t, size_t>> groups;
+        groups.reserve(record_count / 2 + 1);
+        for (size_t start = 0; start < records.size();) {
+            size_t end = start + 1;
+            while (end < records.size() &&
+                   records[end].band == records[start].band &&
+                   records[end].bucket == records[start].bucket) {
+                ++end;
+            }
+            if (end - start > 1) groups.push_back(std::make_pair(start, end));
+            start = end;
+        }
+
+        auto emit_record_group = [&](std::vector<pair_t> &out, size_t start, size_t end) {
+            const size_t n = end - start;
+            if (!constrain_large_buckets || n <= k_bucket_size_limit) {
+                for (size_t a = start; a < end; ++a) {
+                    const IndexType i = records[a].row;
+                    for (size_t b = a + 1; b < end; ++b) {
+                        out.push_back(std::make_pair(i, records[b].row));
+                    }
+                }
+                return;
+            }
+            for (size_t a = start; a < end; ++a) {
+                const IndexType i = records[a].row;
+                size_t b_end = a + 1 + static_cast<size_t>(k_window_pairs);
+                if (b_end > end) b_end = end;
+                for (size_t b = a + 1; b < b_end; ++b) {
+                    out.push_back(std::make_pair(i, records[b].row));
+                }
+            }
+        };
+
+        std::vector<pair_t> all_pairs;
+#ifdef _OPENMP
+        const int max_threads = omp_get_max_threads();
+        std::vector<std::vector<pair_t>> thread_pairs(static_cast<size_t>(max_threads));
+        #pragma omp parallel
+        {
+            const int tid = omp_get_thread_num();
+            std::vector<pair_t> &my_pairs = thread_pairs[static_cast<size_t>(tid)];
+            #pragma omp for schedule(dynamic, 64)
+            for (size_t g = 0; g < groups.size(); ++g) {
+                emit_record_group(my_pairs, groups[g].first, groups[g].second);
+            }
+        }
+        size_t total_pairs = 0;
+        for (const auto &v : thread_pairs) total_pairs += v.size();
+        all_pairs.reserve(total_pairs);
+        for (const auto &v : thread_pairs)
+            all_pairs.insert(all_pairs.end(), v.begin(), v.end());
+#else
+        for (const auto &g : groups)
+            emit_record_group(all_pairs, g.first, g.second);
+#endif
+
+        parallel_sort_pairs(all_pairs.begin(), all_pairs.end());
+        all_pairs.erase(std::unique(all_pairs.begin(), all_pairs.end()), all_pairs.end());
+
+        const size_t np = all_pairs.size();
+        result.resize(np);
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic, 1024)
+#endif
+        for (size_t idx = 0; idx < np; ++idx) {
+            IndexType ii = all_pairs[idx].first, jj = all_pairs[idx].second;
+            result[idx].i = ii;
+            result[idx].j = jj;
+            result[idx].score = static_cast<ValueType>(minhash_estimated_jaccard(
+                sigs + static_cast<size_t>(ii) * static_cast<size_t>(k),
+                sigs + static_cast<size_t>(jj) * static_cast<size_t>(k), k));
+        }
+        return result;
+    }
+
     std::vector<pair_t> all_pairs;
 #ifdef _OPENMP
+    const int max_threads = omp_get_max_threads();
+    std::vector<std::vector<pair_t>> thread_pairs(static_cast<size_t>(max_threads));
     #pragma omp parallel
     {
-        std::vector<pair_t> my_pairs;
+        const int tid = omp_get_thread_num();
+        std::vector<pair_t> &my_pairs = thread_pairs[static_cast<size_t>(tid)];
         #pragma omp for schedule(guided)
         for (int band = 0; band < num_bands; ++band) {
             std::unordered_map<uint64_t, std::vector<IndexType>> buckets;
@@ -429,9 +563,12 @@ std::vector<CandidatePair<IndexType, ValueType>> lsh_candidate_pairs_from_flat_v
                 lsh_emit_pairs_for_bucket<IndexType>(my_pairs, kv.second, constrain_large_buckets);
             }
         }
-        #pragma omp critical
-        all_pairs.insert(all_pairs.end(), my_pairs.begin(), my_pairs.end());
     }
+    size_t total_pairs = 0;
+    for (const auto &v : thread_pairs) total_pairs += v.size();
+    all_pairs.reserve(total_pairs);
+    for (const auto &v : thread_pairs)
+        all_pairs.insert(all_pairs.end(), v.begin(), v.end());
 #else
     for (int band = 0; band < num_bands; ++band) {
         std::unordered_map<uint64_t, std::vector<IndexType>> buckets;

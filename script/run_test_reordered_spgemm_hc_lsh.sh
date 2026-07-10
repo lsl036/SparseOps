@@ -1,14 +1,20 @@
 #!/bin/bash
 # Run test_reordered_spgemm_hc_lsh for each dataset in testdatasets.txt.
-# Uses reordering files: Graph Partition (gp_order) and Hypergraph Partition (hp_order).
+# Reordering files live under REORDER_BASE_DIR/{gp,hp,rcm,gray}_order/.
 # Default kernel=3. Command: test_reordered_spgemm_hc_lsh A.mtx B.mtx reordered_A --kernel=3
 #
-# Usage: from project root: bash script/run_test_reordered_spgemm_hc_lsh.sh
-#        from build:        bash ../script/run_test_reordered_spgemm_hc_lsh.sh
-# Env:   BUILD_DIR, KERNEL (default 3), BASE_DIR (default /data/suitesparse_collection),
-#        GP_ORDER_DIR, HP_ORDER_DIR,
-#        RESULT_CSV (default ROOT/reordered_spgemm_hc_lsh_results.csv): mtx_name,reorder,Average_time_ms,Average_GFLOPS
-#        THREADS (optional): if set, passes --threads=<n> to the binary (e.g. THREADS=64)
+# Usage (from project root):
+#   bash script/run_test_reordered_spgemm_hc_lsh.sh
+#   bash script/run_test_reordered_spgemm_hc_lsh.sh rcm gray
+#   REORDER_TYPES=gp,hp bash script/run_test_reordered_spgemm_hc_lsh.sh
+#
+# Env:
+#   BUILD_DIR, KERNEL (default 3), BASE_DIR (default /data/suitesparse_collection),
+#   REORDER_BASE_DIR (default /data/linshengle_data/SpGEMM-Reordering),
+#   REORDER_TYPES (comma-separated: gp,hp,rcm,gray; default gp,hp),
+#   GP_ORDER_DIR / HP_ORDER_DIR / RCM_ORDER_DIR / GRAY_ORDER_DIR (optional overrides),
+#   RESULT_CSV (default ROOT/reordered_spgemm_hc_lsh_results.csv),
+#   THREADS (optional): passes --threads=<n> to the binary
 
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,9 +23,75 @@ DATASETS="${DATASETS_FILE:-$ROOT/testdatasets.txt}"
 KERNEL="${KERNEL:-3}"
 THREADS="${THREADS:-}"
 BASE="${BASE_DIR:-/data/suitesparse_collection}"
-GP_DIR="${GP_ORDER_DIR:-/data/linshengle_data/SpGEMM-Reordering/gp_order}"
-HP_DIR="${HP_ORDER_DIR:-/data/linshengle_data/SpGEMM-Reordering/hp_order}"
+REORDER_BASE="${REORDER_BASE_DIR:-/data/linshengle_data/SpGEMM-Reordering}"
 RESULT_CSV="${RESULT_CSV:-$ROOT/reordered_spgemm_hc_lsh_results.csv}"
+
+GP_DIR="${GP_ORDER_DIR:-$REORDER_BASE/gp_order}"
+HP_DIR="${HP_ORDER_DIR:-$REORDER_BASE/hp_order}"
+RCM_DIR="${RCM_ORDER_DIR:-$REORDER_BASE/rcm_order}"
+GRAY_DIR="${GRAY_ORDER_DIR:-$REORDER_BASE/gray_order}"
+
+SELECTED_ORDERS=()
+
+parse_selected_orders() {
+  if [[ -n "${REORDER_TYPES:-}" ]]; then
+    local part
+    IFS=',' read -ra SELECTED_ORDERS <<< "${REORDER_TYPES}"
+    for part in "${SELECTED_ORDERS[@]}"; do
+      case "$part" in
+        gp|hp|rcm|gray) ;;
+        *)
+          echo "Error: unknown order type in REORDER_TYPES: $part (use gp,hp,rcm,gray)"
+          exit 1
+          ;;
+      esac
+    done
+    return
+  fi
+
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      gp|hp|rcm|gray) SELECTED_ORDERS+=("$arg") ;;
+      *)
+        echo "Error: unknown argument: $arg (use gp, hp, rcm, gray)"
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ ${#SELECTED_ORDERS[@]} -eq 0 ]]; then
+    SELECTED_ORDERS=(gp hp)
+  fi
+}
+
+reorder_file_for() {
+  local order="$1"
+  local name="$2"
+  case "$order" in
+    gp)   echo "$GP_DIR/${name}.gporder" ;;
+    hp)   echo "$HP_DIR/${name}.hporder" ;;
+    rcm)  echo "$RCM_DIR/${name}.rcmorder" ;;
+    gray) echo "$GRAY_DIR/${name}.grayorder" ;;
+    *)
+      echo "Error: unknown order type: $order" >&2
+      return 1
+      ;;
+  esac
+}
+
+reorder_label_for() {
+  local order="$1"
+  case "$order" in
+    gp)   echo "Graph Partition" ;;
+    hp)   echo "Hypergraph Partition" ;;
+    rcm)  echo "RCM" ;;
+    gray) echo "Gray" ;;
+    *)    echo "$order" ;;
+  esac
+}
+
+parse_selected_orders "$@"
 
 if [[ ! -f "$DATASETS" ]]; then
   echo "Error: dataset list not found at $DATASETS"
@@ -37,8 +109,8 @@ if [[ -n "$THREADS" ]]; then
 else
   echo "Threads: (default from binary / OpenMP)"
 fi
-echo "Graph Partition reorder: $GP_DIR"
-echo "Hypergraph Partition reorder: $HP_DIR"
+echo "Reorder base: $REORDER_BASE"
+echo "Selected orders: ${SELECTED_ORDERS[*]}"
 echo "Results CSV: $RESULT_CSV"
 echo "========================================"
 
@@ -49,11 +121,7 @@ run_one() {
   local order_tag="$2"
   local reorder_file="$3"
   local reorder_label
-  case "$order_tag" in
-    gp) reorder_label="Graph Partition" ;;
-    hp) reorder_label="Hypergraph Partition" ;;
-    *) reorder_label="$order_tag" ;;
-  esac
+  reorder_label="$(reorder_label_for "$order_tag")"
 
   local A="$BASE/$name/$name.mtx"
   local B="$BASE/$name/$name.mtx"
@@ -100,8 +168,10 @@ while IFS= read -r name || [[ -n "$name" ]]; do
   name=$(echo "$name" | tr -d '\r')
   [[ -z "$name" ]] && continue
 
-  run_one "$name" gp "$GP_DIR/$name.gporder"
-  run_one "$name" hp "$HP_DIR/$name.hporder"
+  local_order=""
+  for local_order in "${SELECTED_ORDERS[@]}"; do
+    run_one "$name" "$local_order" "$(reorder_file_for "$local_order" "$name")"
+  done
 done < "$DATASETS"
 
 echo ""

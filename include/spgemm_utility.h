@@ -16,11 +16,14 @@
 #include "thread.h"
 #include <omp.h>
 #include <set>
+#include <unordered_set>
 #include <vector>
 #include <algorithm>
 #include <map>
 #include <queue>
 #include <utility>
+#include <cstdint>
+#include <functional>
 
 // ============================================================================
 // Sequential Scan Functions (for small arrays)
@@ -383,6 +386,48 @@ inline double jaccard_similarity(const IndexType *rowptr, const IndexType *colid
     return (u == 0) ? 0.0 : (1.0 * c / u);
 }
 
+template <typename IndexType>
+inline bool csr_rows_are_strictly_sorted_unique(
+    const IndexType *rowptr, const IndexType *colids, IndexType num_rows)
+{
+    for (IndexType r = 0; r < num_rows; ++r) {
+        for (IndexType j = rowptr[r] + 1; j < rowptr[r + 1]; ++j) {
+            if (colids[j - 1] >= colids[j]) return false;
+        }
+    }
+    return true;
+}
+
+template <typename IndexType, typename ValueType>
+inline double jaccard_similarity_sorted_unique(
+    const IndexType *rowptr, const IndexType *colids, IndexType row_a, IndexType row_b)
+{
+    IndexType ia = rowptr[row_a];
+    IndexType ib = rowptr[row_b];
+    const IndexType enda = rowptr[row_a + 1];
+    const IndexType endb = rowptr[row_b + 1];
+    IndexType common = 0;
+
+    while (ia < enda && ib < endb) {
+        const IndexType ca = colids[ia];
+        const IndexType cb = colids[ib];
+        if (ca == cb) {
+            ++common;
+            ++ia;
+            ++ib;
+        } else if (ca < cb) {
+            ++ia;
+        } else {
+            ++ib;
+        }
+    }
+
+    const IndexType len_a = enda - rowptr[row_a];
+    const IndexType len_b = endb - rowptr[row_b];
+    const IndexType uni = len_a + len_b - common;
+    return (uni == 0) ? 0.0 : (1.0 * common / uni);
+}
+
 /**
  * @brief Generate offsets for variable-length cluster based on Jaccard similarity
  *        Reference: User-provided clustering algorithm
@@ -443,6 +488,22 @@ inline std::vector<IndexType> generate_offsets_jaccard(
 // ============================================================================
 // Hierarchical Clustering (reference: HierarchicalClusterSpGEMM.cpp)
 // ============================================================================
+
+template <typename IndexType>
+struct PairHash {
+    static inline uint64_t splitmix64(uint64_t x) {
+        x += 0x9e3779b97f4a7c15ULL;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+        return x ^ (x >> 31);
+    }
+
+    size_t operator()(const std::pair<IndexType, IndexType> &p) const {
+        uint64_t a = splitmix64(static_cast<uint64_t>(p.first));
+        uint64_t b = splitmix64(static_cast<uint64_t>(p.second));
+        return static_cast<size_t>(a ^ (b + 0x9e3779b97f4a7c15ULL + (a << 6) + (a >> 2)));
+    }
+};
 
 /**
  * @brief Hierarchical clustering v0: Union-Find + priority queue by similarity from close_pairs.
@@ -637,6 +698,188 @@ inline void hierarchical_clustering_v1(
     }
 
     /* Build permutation and offsets from union-find result (no map). */
+    std::vector<IndexType> root(num_rows);
+    for (IndexType i = 0; i < num_rows; i++)
+        root[i] = find(i);
+
+    std::vector<IndexType> count(num_rows, 0);
+    for (IndexType i = 0; i < num_rows; i++)
+        count[root[i]]++;
+
+    std::vector<IndexType> sorted_roots;
+    sorted_roots.reserve(static_cast<size_t>(num_rows));
+    for (IndexType r = 0; r < num_rows; r++)
+        if (count[r] > 0) sorted_roots.push_back(r);
+
+    std::vector<IndexType> cluster_id(num_rows, static_cast<IndexType>(-1));
+    for (size_t c = 0; c < sorted_roots.size(); c++)
+        cluster_id[sorted_roots[c]] = static_cast<IndexType>(c);
+
+    offsets_out.resize(sorted_roots.size() + 1);
+    offsets_out[0] = 0;
+    for (size_t c = 0; c < sorted_roots.size(); c++)
+        offsets_out[c + 1] = offsets_out[c] + count[sorted_roots[c]];
+
+    permutation_out.resize(static_cast<size_t>(num_rows));
+    std::vector<IndexType> curr(sorted_roots.size());
+    for (size_t c = 0; c < sorted_roots.size(); c++)
+        curr[c] = offsets_out[c];
+
+    for (IndexType i = 0; i < num_rows; i++) {
+        IndexType r = root[i];
+        IndexType c = cluster_id[r];
+        permutation_out[static_cast<size_t>(curr[c]++)] = i;
+    }
+}
+
+/**
+ * @brief Fast v0-style hierarchical clustering from compact candidate pairs.
+ *        Keeps the same priority-queue merge model as v0, but avoids std::map:
+ *        - input pairs are already sorted/deduplicated by vector LSH;
+ *        - initial pairs are checked by binary search, and only discovered root pairs use unordered_set;
+ *        - permutation and offsets are built directly.
+ */
+template <typename IndexType, typename ValueType, typename PairLike>
+inline void hierarchical_clustering_v0_fast(
+    const IndexType *rowptr, const IndexType *colids, IndexType num_rows,
+    const std::vector<PairLike> &pairs,
+    IndexType cluster_size,
+    std::vector<IndexType> &permutation_out,
+    std::vector<IndexType> &offsets_out)
+{
+    permutation_out.clear();
+    offsets_out.clear();
+
+    std::vector<IndexType> clusters(num_rows);
+    std::vector<IndexType> sz(num_rows);
+    std::vector<int> valid(num_rows, 1);
+    for (IndexType i = 0; i < num_rows; i++) {
+        clusters[i] = i;
+        sz[i] = 1;
+    }
+
+    auto find = [&clusters](IndexType x) -> IndexType {
+        IndexType root = x;
+        while (clusters[root] != root) root = clusters[root];
+        while (clusters[x] != root) {
+            IndexType next = clusters[x];
+            clusters[x] = root;
+            x = next;
+        }
+        return root;
+    };
+
+    using pair_t = std::pair<IndexType, IndexType>;
+    using item_t = std::pair<ValueType, pair_t>;
+    auto cmp = [](const item_t &a, const item_t &b) {
+        return a.first < b.first || (a.first == b.first && a.second < b.second);
+    };
+    std::map<ValueType, std::vector<pair_t>, std::greater<ValueType>> initial_buckets;
+
+    for (const auto &p : pairs) {
+        IndexType ii = p.i, jj = p.j;
+        if (ii > jj) std::swap(ii, jj);
+        if (ii == jj || ii >= num_rows || jj >= num_rows) continue;
+        pair_t key = std::make_pair(ii, jj);
+        initial_buckets[static_cast<ValueType>(p.score)].push_back(key);
+    }
+    std::priority_queue<item_t, std::vector<item_t>, decltype(cmp)> dynamic_sims(cmp);
+
+    auto initial_has_pair = [&pairs](const pair_t &key) -> bool {
+        auto it = std::lower_bound(
+            pairs.begin(), pairs.end(), key,
+            [](const PairLike &lhs, const pair_t &rhs) {
+                if (lhs.i != rhs.first) return lhs.i < rhs.first;
+                return lhs.j < rhs.second;
+            });
+        return it != pairs.end() && it->i == key.first && it->j == key.second;
+    };
+
+    std::unordered_set<pair_t, PairHash<IndexType>> discovered;
+    discovered.reserve(pairs.size() / 8 + 1024);
+    const bool use_sorted_jaccard =
+        csr_rows_are_strictly_sorted_unique<IndexType>(rowptr, colids, num_rows);
+    auto exact_jaccard = [&](IndexType a, IndexType b) -> ValueType {
+        if (use_sorted_jaccard) {
+            return static_cast<ValueType>(
+                jaccard_similarity_sorted_unique<IndexType, ValueType>(rowptr, colids, a, b));
+        }
+        return static_cast<ValueType>(jaccard_similarity<IndexType, ValueType>(rowptr, colids, a, b));
+    };
+
+    auto bucket_it = initial_buckets.begin();
+    auto advance_initial_bucket = [&]() {
+        while (bucket_it != initial_buckets.end() && bucket_it->second.empty()) ++bucket_it;
+    };
+    auto has_initial_pair = [&]() -> bool {
+        advance_initial_bucket();
+        return bucket_it != initial_buckets.end();
+    };
+    auto peek_initial_pair = [&]() -> item_t {
+        return std::make_pair(bucket_it->first, bucket_it->second.back());
+    };
+    auto pop_initial_pair = [&]() -> item_t {
+        item_t item = peek_initial_pair();
+        bucket_it->second.pop_back();
+        return item;
+    };
+
+    int nclusters = static_cast<int>(num_rows);
+    while ((has_initial_pair() || !dynamic_sims.empty()) && nclusters > 0) {
+        item_t top;
+        if (dynamic_sims.empty()) {
+            top = pop_initial_pair();
+        } else if (!has_initial_pair()) {
+            top = dynamic_sims.top();
+            dynamic_sims.pop();
+        } else {
+            item_t initial_top = peek_initial_pair();
+            if (cmp(dynamic_sims.top(), initial_top)) {
+                top = pop_initial_pair();
+            } else {
+                top = dynamic_sims.top();
+                dynamic_sims.pop();
+            }
+        }
+
+        IndexType i = top.second.first;
+        IndexType j = top.second.second;
+        if (i >= num_rows || j >= num_rows) continue;
+
+        if (clusters[i] == i && clusters[j] == j) {
+            if (!valid[i] || !valid[j]) continue;
+            nclusters--;
+            if (sz[i] < sz[j]) {
+                clusters[i] = j;
+                sz[j] += sz[i];
+                if (sz[j] >= cluster_size) {
+                    valid[j] = 0;
+                    nclusters--;
+                }
+            } else {
+                clusters[j] = i;
+                sz[i] += sz[j];
+                if (sz[i] >= cluster_size) {
+                    valid[i] = 0;
+                    nclusters--;
+                }
+            }
+        } else {
+            IndexType ri = find(i);
+            IndexType rj = find(j);
+            if (!valid[ri] || !valid[rj]) continue;
+            if (ri != rj) {
+                IndexType pi = (ri < rj) ? ri : rj;
+                IndexType pj = (ri < rj) ? rj : ri;
+                pair_t key = std::make_pair(pi, pj);
+                if (!initial_has_pair(key) && discovered.insert(key).second) {
+                    ValueType s_val = exact_jaccard(pi, pj);
+                    dynamic_sims.push(std::make_pair(s_val, key));
+                }
+            }
+        }
+    }
+
     std::vector<IndexType> root(num_rows);
     for (IndexType i = 0; i < num_rows; i++)
         root[i] = find(i);
