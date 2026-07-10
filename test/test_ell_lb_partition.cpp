@@ -53,7 +53,7 @@ int main(int argc, char** argv)
     balanced_partition_row_by_nnz_ell(ell_matrix.col_index, ell_matrix.num_nnzs, ell_matrix.num_rows, ell_matrix.max_row_width, thread_num, partition);
 
     printf("Thread Partition ELL: \n");
-    for (size_t i = 0; i < thread_num + 1; i++)
+    for (int i = 0; i < thread_num + 1; i++)
     {
         printf(" %d", partition[i]);
     }

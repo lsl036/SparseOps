@@ -46,7 +46,7 @@ void test_martixfile(int argc, char** argv)
     std::cout << " nnz block = " << bsr.nnzb << std::endl;
 
     printf("BSR Row_ptr: \n");
-    for (size_t i = 0; i < bsr.mb + 1; i++)
+    for (int i = 0; i < bsr.mb + 1; i++)
     {
         printf("%d ", bsr.row_ptr[i]);
     }

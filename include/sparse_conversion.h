@@ -1933,7 +1933,7 @@ CSR_Matrix<IndexType, ValueType> csr_reorder_rows(
     
     // Build reordered matrix: iterate shuffled_rows (row_permutation), use col_map to get new row index
     // Reference: for (auto t: shuffled_rows) { ... triples[triplet_id] = Triple(col_map[t], ...) }
-    IndexType triplet_id = 0;
+    // IndexType triplet_id = 0;
     IndexType row_id = 0;
     
     // First pass: compute row_offset (prefix sum of nnz per row)
