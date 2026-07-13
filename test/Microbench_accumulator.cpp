@@ -6,8 +6,7 @@
 #include <random>
 #include <iomanip>
 #include "../include/plat_config.h"
-// // 模拟硬件参数 - 假设 1MB L2
-// #define CPU_L2CACHE_SIZE (1024 * 1024)
+// // 模拟硬件参数 - L2 cache_size for range
 const int RANGE = CPU_L2CACHE_SIZE / CPU_CORES_PER_SOC/ CPU_SOCKET/8; 
 const int REPEAT = 100;
 const int CSZ = 8; // 模拟向量化宽度 (例如 AVX-512 double)
@@ -71,7 +70,6 @@ double test_dense_accumulator_simulated(int nnz_per_col, int num_cols, int range
         }
 
         // 3. 仿真写回 (只遍历有数据的部分，或者为了公平只做简单检查)
-        // 注意：原代码这里的全量遍历是耗时大户，我们做个限时模拟
         for (int k = 0; k < nnz_per_col; ++k) {
             int idx = b_cols[k] * csz;
             if (dense_buf[idx] > 1e-9) dense_buf[idx] = 0;

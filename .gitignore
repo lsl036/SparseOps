@@ -23,3 +23,7 @@ script/*.csv
 # data/: track download script only; ignore downloaded SuiteSparse / matrix files
 data/*
 !data/download_datasets.py
+
+figs/*/*.txt
+figs/*/*.pdf
+figs/fig7/likwid-5.5.1/
