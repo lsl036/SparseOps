@@ -4,7 +4,7 @@ Run test_spgemm_hc_lsh for each line in a dataset list file.
 Each line: dataset_name  k  bands  [optional rest ignored]
 Command: test_spgemm_hc_lsh BASE/name/name.mtx BASE/name/name.mtx --k=k --bands=bands --hc_v=0 --kernel=...
 OMP: OMP_PLACES=cores, OMP_PROC_BIND=spread. No timeout.
-Writes CSV: mtxname,k,bands,r,kernel,genPairs_time,HC_time,Format_Conversion_time,LeSpGEMM_VLength_time,mixed_acc,phase_breakdown_avg,error
+Writes CSV: mtxname,k,bands,r,kernel,genPairs_time,HC_time,Format_Conversion_time,LeSpGEMM_VLength_time,GFLOPS,mixed_acc,phase_breakdown_avg,error
   With --print-bd, program prints [mixed_acc] phase breakdown avg ... (warmup breakdown is never printed).
 
 Threads:
@@ -23,7 +23,10 @@ Usage:
   python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --threads 64
 
   # With results CSV (default: <list_file_stem>_results.csv)
-  python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt -c run_results.csv
+  python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt -o run_results.csv
+
+  # Optionally preserve raw stdout/stderr separately
+  python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --log run_results.log
 
   # With hierarchical clustering v1
   python3 ../script/run_test_spgemm_hc_lsh_list.py ../runable_datasets.txt --hc_v=1 -c run_results_hc_v1.csv
@@ -44,22 +47,28 @@ from pathlib import Path
 def parse_run_output(text: str):
     """Extract times (ms) and [mixed_acc] from program stdout. Returns dict or None on failure."""
     out = {}
-    m = re.search(r"genPairs time:\s*([\d.]+)\s*ms", text)
+    num_pat = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+
+    m = re.search(rf"genPairs time:\s*{num_pat}\s*ms", text)
     if not m:
         return None
     out["genPairs_time"] = float(m.group(1))
-    m = re.search(r"HC time:\s*([\d.]+)\s*ms", text)
+    m = re.search(rf"HC time:\s*{num_pat}\s*ms", text)
     if not m:
         return None
     out["HC_time"] = float(m.group(1))
-    m = re.search(r"Format Conversion time:\s*([\d.]+)\s*ms", text)
+    m = re.search(rf"Format Conversion time:\s*{num_pat}\s*ms", text)
     if not m:
         return None
     out["Format_Conversion_time"] = float(m.group(1))
-    m = re.search(r"Average time \(LeSpGEMM_VLength\):\s*([\d.]+)\s*ms", text)
+    m = re.search(rf"Average time \(LeSpGEMM_VLength\):\s*{num_pat}\s*ms", text)
     if not m:
         return None
     out["LeSpGEMM_VLength_time"] = float(m.group(1))
+    m = re.search(rf"Average GFLOPS:\s*{num_pat}", text)
+    if not m:
+        return None
+    out["GFLOPS"] = float(m.group(1))
     # First [mixed_acc] line is dense clusters; optional second line is phase breakdown avg
     mixed_lines = re.findall(r"\[mixed_acc\][^\n]*", text)
     out["mixed_acc"] = mixed_lines[0].replace("[mixed_acc]", "").strip() if mixed_lines else ""
@@ -92,14 +101,15 @@ def main():
         help="Path to test_spgemm_hc_lsh executable",
     )
     parser.add_argument(
-        "-o", "--output",
-        metavar="FILE",
-        help="Append stdout/stderr of each run to FILE (optional)",
-    )
-    parser.add_argument(
-        "-c", "--csv",
+        "-o", "--output", "-c", "--csv",
+        dest="csv",
         metavar="FILE",
         help="Write results to CSV (default: <list_file_stem>_results.csv)",
+    )
+    parser.add_argument(
+        "--log",
+        metavar="FILE",
+        help="Append raw stdout/stderr of each run to FILE (optional)",
     )
     parser.add_argument(
         "--print-bd",
@@ -152,12 +162,16 @@ def main():
     lines = list_path.read_text(encoding="utf-8", errors="replace").strip().splitlines()
     total = 0
     failed = 0
-    log_file = open(args.output, "a", encoding="utf-8") if args.output else None
-
     csv_path = Path(args.csv) if args.csv else list_path.parent / (list_path.stem + "_results.csv")
+    if args.log and Path(args.log).resolve() == csv_path.resolve():
+        print("Error: CSV output and raw log must use different files", file=sys.stderr)
+        return 1
+    log_file = open(args.log, "a", encoding="utf-8") if args.log else None
+
     fieldnames = [
         "mtxname", "k", "bands", "r", "kernel",
         "genPairs_time", "HC_time", "Format_Conversion_time", "LeSpGEMM_VLength_time",
+        "GFLOPS",
         "mixed_acc", "phase_breakdown_avg", "error",
     ]
     csv_file = open(csv_path, "w", newline="", encoding="utf-8")
@@ -184,6 +198,7 @@ def main():
                 csv_writer.writerow({
                     "mtxname": name, "k": k, "bands": bands, "r": r, "kernel": args.kernel,
                     "genPairs_time": "", "HC_time": "", "Format_Conversion_time": "", "LeSpGEMM_VLength_time": "",
+                    "GFLOPS": "",
                     "mixed_acc": "", "phase_breakdown_avg": "", "error": "matrix not found",
                 })
                 csv_file.flush()
@@ -207,6 +222,7 @@ def main():
             row = {
                 "mtxname": name, "k": k, "bands": bands, "r": r, "kernel": args.kernel,
                 "genPairs_time": "", "HC_time": "", "Format_Conversion_time": "", "LeSpGEMM_VLength_time": "",
+                "GFLOPS": "",
                 "mixed_acc": "", "phase_breakdown_avg": "", "error": "",
             }
             try:
@@ -240,9 +256,10 @@ def main():
                         row["HC_time"] = parsed["HC_time"]
                         row["Format_Conversion_time"] = parsed["Format_Conversion_time"]
                         row["LeSpGEMM_VLength_time"] = parsed["LeSpGEMM_VLength_time"]
+                        row["GFLOPS"] = parsed["GFLOPS"]
                         row["mixed_acc"] = parsed.get("mixed_acc", "")
                         row["phase_breakdown_avg"] = parsed.get("phase_breakdown_avg", "")
-                        print(f"  OK", flush=True)
+                        print(f"  OK: {parsed['GFLOPS']:.6g} GFLOPS", flush=True)
                     else:
                         row["error"] = "parse_failed"
                         failed += 1
