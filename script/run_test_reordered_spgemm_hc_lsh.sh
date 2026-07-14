@@ -1,30 +1,38 @@
 #!/bin/bash
 # Run test_reordered_spgemm_hc_lsh for each dataset in testdatasets.txt.
-# Reordering files live under REORDER_BASE_DIR/{gp,hp,rcm,gray}_order/.
+# By default, matrices and reorderings live under SPARSEOPS_ROOT/data/.
 # Default kernel=3. Command: test_reordered_spgemm_hc_lsh A.mtx B.mtx reordered_A --kernel=3
 #
-# Usage (from project root):
+# Usage:
 #   bash script/run_test_reordered_spgemm_hc_lsh.sh
 #   bash script/run_test_reordered_spgemm_hc_lsh.sh rcm gray
 #   REORDER_TYPES=gp,hp bash script/run_test_reordered_spgemm_hc_lsh.sh
 #
 # Env:
-#   BUILD_DIR, KERNEL (default 3), BASE_DIR (default /data/suitesparse_collection),
-#   REORDER_BASE_DIR (default /data/linshengle_data/SpGEMM-Reordering),
+#   SPARSEOPS_ROOT (default: inferred from this script),
+#   BUILD_DIR (default SPARSEOPS_ROOT/build),
+#   DATASETS_FILE (default SPARSEOPS_ROOT/testdatasets.txt),
+#   BASE_DIR (default SPARSEOPS_ROOT/data),
+#   REORDER_BASE_DIR (default SPARSEOPS_ROOT/data/reordering),
+#   KERNEL (default 3),
 #   REORDER_TYPES (comma-separated: gp,hp,rcm,gray; default gp,hp),
 #   GP_ORDER_DIR / HP_ORDER_DIR / RCM_ORDER_DIR / GRAY_ORDER_DIR (optional overrides),
-#   RESULT_CSV (default ROOT/reordered_spgemm_hc_lsh_results.csv),
+#   RESULT_CSV (default CALLER_DIR/reordered_spgemm_hc_lsh_results.csv),
 #   THREADS (optional): passes --threads=<n> to the binary
 
 set -e
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="${BUILD_DIR:-$ROOT/build}"
-DATASETS="${DATASETS_FILE:-$ROOT/testdatasets.txt}"
+CALLER_DIR="$(pwd -P)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SPARSEOPS_ROOT="${SPARSEOPS_ROOT:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
+BUILD="${BUILD_DIR:-${SPARSEOPS_ROOT}/build}"
+DATASETS="${DATASETS_FILE:-${SPARSEOPS_ROOT}/testdatasets.txt}"
 KERNEL="${KERNEL:-3}"
 THREADS="${THREADS:-}"
-BASE="${BASE_DIR:-/data/suitesparse_collection}"
-REORDER_BASE="${REORDER_BASE_DIR:-/data/linshengle_data/SpGEMM-Reordering}"
-RESULT_CSV="${RESULT_CSV:-$ROOT/reordered_spgemm_hc_lsh_results.csv}"
+BASE="${BASE_DIR:-${SPARSEOPS_ROOT}/data}"
+REORDER_BASE="${REORDER_BASE_DIR:-${SPARSEOPS_ROOT}/data/reordering}"
+RESULT_CSV="${RESULT_CSV:-$CALLER_DIR/reordered_spgemm_hc_lsh_results.csv}"
+
+export SPARSEOPS_ROOT
 
 GP_DIR="${GP_ORDER_DIR:-$REORDER_BASE/gp_order}"
 HP_DIR="${HP_ORDER_DIR:-$REORDER_BASE/hp_order}"
@@ -103,7 +111,9 @@ if [[ ! -x "$BUILD/test_reordered_spgemm_hc_lsh" ]]; then
 fi
 
 cd "$BUILD"
+echo "SparseOps root: $SPARSEOPS_ROOT"
 echo "Using build: $BUILD, kernel: $KERNEL"
+echo "Matrix base: $BASE"
 if [[ -n "$THREADS" ]]; then
   echo "Threads: $THREADS (passed as --threads=$THREADS)"
 else
@@ -114,7 +124,7 @@ echo "Selected orders: ${SELECTED_ORDERS[*]}"
 echo "Results CSV: $RESULT_CSV"
 echo "========================================"
 
-echo "mtx_name,reorder,Average_time_ms,Average_GFLOPS" > "$RESULT_CSV"
+echo "mtx_name,kernel,reorder,Average_time_ms,Average_GFLOPS" > "$RESULT_CSV"
 
 run_one() {
   local name="$1"
@@ -128,12 +138,12 @@ run_one() {
 
   if [[ ! -f "$A" ]]; then
     echo "Skip $name ($reorder_label): A not found $A"
-    echo "${name},${order_tag},," >> "$RESULT_CSV"
+    echo "${name},${KERNEL},${order_tag},," >> "$RESULT_CSV"
     return 0
   fi
   if [[ ! -f "$reorder_file" ]]; then
     echo "Skip $name ($reorder_label): reorder file not found $reorder_file"
-    echo "${name},${order_tag},," >> "$RESULT_CSV"
+    echo "${name},${KERNEL},${order_tag},," >> "$RESULT_CSV"
     return 0
   fi
 
@@ -157,10 +167,10 @@ run_one() {
   gflops=$(printf '%s\n' "$out" | sed -n 's/.*Average GFLOPS: \([0-9.]*\).*/\1/p' | head -n1)
 
   if [[ $rc -ne 0 ]] || [[ -z "$avg_ms" ]] || [[ -z "$gflops" ]]; then
-    echo "${name},${order_tag},," >> "$RESULT_CSV"
+    echo "${name},${KERNEL},${order_tag},," >> "$RESULT_CSV"
     echo "  WARN: exit code $rc (empty metrics = skip or parse failed)" >&2
   else
-    echo "${name},${order_tag},${avg_ms},${gflops}" >> "$RESULT_CSV"
+    echo "${name},${KERNEL},${order_tag},${avg_ms},${gflops}" >> "$RESULT_CSV"
   fi
 }
 
