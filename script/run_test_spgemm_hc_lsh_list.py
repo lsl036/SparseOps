@@ -133,7 +133,7 @@ def main():
         "--kernel",
         type=int,
         choices=(1, 2, 3),
-        default=1,
+        default=3,
         help="Passed as --kernel= to binary: 1 Hash VLength, 2 Array VLength, 3 Mixed-accumulator (default 1)",
     )
     args = parser.parse_args()

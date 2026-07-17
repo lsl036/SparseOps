@@ -58,11 +58,11 @@ $SPARSEOPS_ROOT/build/test_spgemm_hc_lsh $SPARSEOPS_ROOT/data/cant/cant.mtx $SPA
 ### 3.2 Test scripts
 1. For hybrid accumulator performance:
 ```bash
-python3 $SPARSEOPS_ROOT/script/run_test_spgemm_hc_lsh_list.py $SPARSEOPS_ROOT/runable_casesets.txt --hc_v=2 -c naiveLSH_results_Hyb.csv --threads 128 --kernel 3
+python3 $SPARSEOPS_ROOT/script/run_test_spgemm_hc_lsh_list.py $SPARSEOPS_ROOT/runable_casesets.txt --hc_v 2 -c naiveLSH_results_Hyb.csv --threads 128 --kernel 3
 ```
 2. For hash-based accumulator performance:
 ```bash
-python3 $SPARSEOPS_ROOT/script/run_test_spgemm_hc_lsh_list.py $SPARSEOPS_ROOT/runable_casesets.txt --hc_v=2 -c naiveLSH_results_Hash.csv --threads 128 --kernel 1
+python3 $SPARSEOPS_ROOT/script/run_test_spgemm_hc_lsh_list.py $SPARSEOPS_ROOT/runable_casesets.txt --hc_v 2 -c naiveLSH_results_Hash.csv --threads 128 --kernel 1
 ```
 ## 4. C-LSH Reordering (LeSpGEMM)
 ### 4.1 Quick test 
