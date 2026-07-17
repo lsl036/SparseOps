@@ -6,22 +6,28 @@
 #        from build:        bash ../script/run_test_spgemm_hc.sh
 #
 # Env:
-#   BUILD_DIR, DATASETS_FILE (default ROOT/testdatasets.txt),
-#   BASE_DIR (default /data/suitesparse_collection),
-#   CLOSE_PAIRS_DIR (default .../close_pairs),
+#   SPARSEOPS_ROOT (default: inferred from this script),
+#   BUILD_DIR (default SPARSEOPS_ROOT/build),
+#   DATASETS_FILE (default SPARSEOPS_ROOT/testdatasets.txt),
+#   BASE_DIR (default SPARSEOPS_ROOT/data),
+#   CLOSE_PAIRS_DIR (default SPARSEOPS_ROOT/data/close_pairs),
 #   KERNEL (default 3), THREADS (optional, e.g. 64),
-#   RESULT_CSV (default ROOT/test_spgemm_hc_results.csv)
+#   RESULT_CSV (default CALLER_DIR/test_spgemm_hc_results.csv)
 # CSV columns: mtx_name,threads,kernel,Average_time_ms,Average_GFLOPS
 
 set -e
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="${BUILD_DIR:-$ROOT/build}"
-DATASETS="${DATASETS_FILE:-$ROOT/testdatasets.txt}"
+CALLER_DIR="$(pwd -P)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SPARSEOPS_ROOT="${SPARSEOPS_ROOT:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
+BUILD="${BUILD_DIR:-${SPARSEOPS_ROOT}/build}"
+DATASETS="${DATASETS_FILE:-${SPARSEOPS_ROOT}/testdatasets.txt}"
 KERNEL="${KERNEL:-3}"
 THREADS="${THREADS:-}"
-BASE="${BASE_DIR:-/data/suitesparse_collection}"
-CLOSE_PAIRS_DIR="${CLOSE_PAIRS_DIR:-/data/linshengle_data/SpGEMM-Reordering/close_pairs}"
-RESULT_CSV="${RESULT_CSV:-$ROOT/test_spgemm_hc_results.csv}"
+BASE="${BASE_DIR:-${SPARSEOPS_ROOT}/data}"
+CLOSE_PAIRS_DIR="${CLOSE_PAIRS_DIR:-${SPARSEOPS_ROOT}/data/reordering/close_pair}"
+RESULT_CSV="${RESULT_CSV:-$CALLER_DIR/test_spgemm_hc_results.csv}"
+
+export SPARSEOPS_ROOT
 
 if [[ ! -f "$DATASETS" ]]; then
   echo "Error: dataset list not found at $DATASETS"
@@ -33,6 +39,7 @@ if [[ ! -x "$BUILD/test_spgemm_hc" ]]; then
 fi
 
 cd "$BUILD"
+echo "SparseOps root: $SPARSEOPS_ROOT"
 echo "Using build: $BUILD"
 echo "Kernel: $KERNEL"
 if [[ -n "$THREADS" ]]; then
