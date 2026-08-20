@@ -1,0 +1,42 @@
+{
+  "title": "LIKWID",
+  "description": "Performance monitoring and benchmarking suite.",
+  "creators": [
+    {
+      "affiliation": "Reginales Rechenzentrum Erlangen, Friedrich-Alexander-Universität Erlangen-Nürnberg",
+      "name": "Thomas Gruber",
+      "orcid": "0000-0001-5560-6964"
+    },
+    {
+      "affiliation": "Reginales Rechenzentrum Erlangen, Friedrich-Alexander-Universität Erlangen-Nürnberg",
+      "name": "Michael Panzlaff"
+    },
+    {
+      "affiliation": "Reginales Rechenzentrum Erlangen, Friedrich-Alexander-Universität Erlangen-Nürnberg",
+      "name": "Jan Eitzinger"
+    },
+    {
+      "affiliation": "Reginales Rechenzentrum Erlangen, Friedrich-Alexander-Universität Erlangen-Nürnberg",
+      "name": "Georg Hager",
+      "orcid": "0000-0002-8723-2781"
+    },
+    {
+      "affiliation": "Reginales Rechenzentrum Erlangen, Friedrich-Alexander-Universität Erlangen-Nürnberg",
+      "name": "Gerhard Wellein",
+      "orcid": "0000-0001-7371-3026"
+    }
+  ],
+  "upload_type": "software",
+  "license": "GPL-3.0",
+  "access_right": "open",
+  "keywords": [
+    "performance-engineering",
+    "performance-monitoring",
+    "performance-analysis",
+    "open-source"
+  ],
+  "notes": "This research has been partially funded by grants: BMBF 01IH13009, BMBF 01IH16012C and BMBF 16ME0583K",
+  "communities": [
+    {"identifier": "fau"}
+  ]
+}

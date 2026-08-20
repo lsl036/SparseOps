@@ -1,0 +1,35 @@
+SHORT  Memory bandwidth in MBytes/s
+
+EVENTSET
+FIXC0 INSTR_RETIRED_ANY
+FIXC1 CPU_CLK_UNHALTED_CORE
+FIXC2 CPU_CLK_UNHALTED_REF
+FIXC3 TOPDOWN_SLOTS
+MBOX0C1  DRAM_READS
+MBOX0C2  DRAM_WRITES
+
+METRICS
+Runtime (RDTSC) [s] time
+Runtime unhalted [s] FIXC1*inverseClock
+Clock [MHz]  1.E-06*(FIXC1/FIXC2)/inverseClock
+CPI  FIXC1/FIXC0
+Memory load bandwidth [MBytes/s]  1.0E-06*MBOX0C1*64.0/time
+Memory load data volume [GBytes]  1.0E-09*MBOX0C1*64.0
+Memory evict bandwidth [MBytes/s]  1.0E-06*MBOX0C2*64.0/time
+Memory evict data volume [GBytes]  1.0E-09*MBOX0C2*64.0
+Memory bandwidth [MBytes/s] 1.0E-06*(MBOX0C1+MBOX0C2)*64.0/time
+Memory data volume [GBytes] 1.0E-09*(MBOX0C1+MBOX0C2)*64.0
+
+LONG
+Formulas:
+Memory load bandwidth [MBytes/s] = 1.0E-06*DRAM_READS*64.0/time
+Memory load data volume [GBytes] = 1.0E-09*DRAM_READS*64.0
+Memory evict bandwidth [MBytes/s] = 1.0E-06*DRAM_WRITES*64.0/time
+Memory evict data volume [GBytes] = 1.0E-09*DRAM_WRITES*64.0
+Memory bandwidth [MBytes/s] = 1.0E-06*(DRAM_READS+DRAM_WRITES)*64/time
+Memory data volume [GBytes] = 1.0E-09*(DRAM_READS+DRAM_WRITES)*64
+-
+Profiling group to measure memory cache bandwidth. The desktop-class Intel
+chips provide free-running memory counters in the MMIO space. Since they are
+free-running, it might overflow without notice if the read intervals are too long.
+
