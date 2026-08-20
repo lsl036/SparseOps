@@ -130,11 +130,24 @@ Platform-specific collection:
 - Intel uses CPUs `0-27`, 28 SpGEMM threads, and LIKWID group `L3`. It prefers
   `L3|MEM evict data volume [GBytes]` and falls back to
   `L3 evict data volume [GBytes]` when required by the microarchitecture.
+  On larger sockets (for example Xeon Gold 8360Y / Ice Lake-SP), override
+  affinity explicitly, e.g. `CPU_LIST=0-35 THREADS=36 ./run_l2_volume.sh`.
 - AMD selects one hardware thread from every physical core. On the reference
   EPYC 7C13 this is CPUs `0-127` and 128 SpGEMM threads. It measures
   `L2_PF_HIT_IN_L3`, `L2_PF_MISS_IN_L3`, and
   `L2_CACHE_MISS_AFTER_L1_MISS`, then multiplies their per-thread sum by
   64 bytes to obtain L2 fill/miss traffic in GB.
+
+Optional `perf`-based hit-rate path (`./run_l2_fraction.sh`):
+
+- AMD uses `l2_cache_accesses_from_dc_misses` / `l2_cache_misses_from_dc_misses`.
+- Intel prefers `l2_rqsts.references` / `l2_rqsts.miss` (Skylake-era names).
+  On Ice Lake and later (for example Xeon Gold 8360), those names are absent;
+  the script automatically falls back to
+  `l2_rqsts.all_demand_data_rd` / `l2_rqsts.all_demand_miss`
+  ([Intel Ice Lake core events](https://perfmon-events.intel.com/platforms/icelakex/core-events/core/)).
+  The fallback counts demand data reads only, so absolute rates can differ from
+  the Skylake-era pair, but the L2-fraction sweep trend remains usable.
 
 To override affinity or the number of numeric iterations:
 

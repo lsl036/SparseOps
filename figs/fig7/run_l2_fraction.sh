@@ -28,14 +28,55 @@ if [[ ! -f "${MATRIX}" ]]; then
 fi
 
 CPU_VENDOR="$(awk -F: '/^vendor_id/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' /proc/cpuinfo)"
+
+PERF_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/sparseops-fig7-perf.XXXXXX")"
+WORKLOAD_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/sparseops-fig7-workload.XXXXXX")"
+trap 'rm -f "${PERF_OUTPUT}" "${WORKLOAD_OUTPUT}"' EXIT
+
+# Return 0 if both symbolic event names are usable with the local perf.
+events_available() {
+    local all_event="$1"
+    local miss_event="$2"
+    local events="${all_event}:u,${miss_event}:u"
+
+    : >"${PERF_OUTPUT}"
+    if ! perf stat --no-big-num -x ';' -e "${events}" \
+        -o "${PERF_OUTPUT}" -- true >/dev/null 2>&1; then
+        return 1
+    fi
+    if grep -Eq '<not (supported|counted)>' "${PERF_OUTPUT}"; then
+        return 1
+    fi
+    return 0
+}
+
+# Select a vendor-specific L2 access/miss event pair.
+# Intel: prefer the classic Skylake-era names; fall back to Ice Lake demand-data
+# events when l2_rqsts.references / l2_rqsts.miss are unavailable (e.g. Xeon 8360).
 case "${CPU_VENDOR}" in
     AuthenticAMD)
         L2_ALL_EVENT="l2_cache_accesses_from_dc_misses"
         L2_MISS_EVENT="l2_cache_misses_from_dc_misses"
         ;;
     GenuineIntel)
-        L2_ALL_EVENT="l2_rqsts.references"
-        L2_MISS_EVENT="l2_rqsts.miss"
+        L2_ALL_EVENT=""
+        L2_MISS_EVENT=""
+        if events_available "l2_rqsts.references" "l2_rqsts.miss"; then
+            L2_ALL_EVENT="l2_rqsts.references"
+            L2_MISS_EVENT="l2_rqsts.miss"
+        elif events_available "l2_rqsts.all_demand_data_rd" "l2_rqsts.all_demand_miss"; then
+            L2_ALL_EVENT="l2_rqsts.all_demand_data_rd"
+            L2_MISS_EVENT="l2_rqsts.all_demand_miss"
+            echo "note: using Ice Lake L2 demand-data events" \
+                "(l2_rqsts.references / l2_rqsts.miss are unavailable on this CPU)" >&2
+        else
+            echo "error: no usable Intel L2 perf events found" >&2
+            echo "Tried:" >&2
+            echo "  l2_rqsts.references, l2_rqsts.miss" >&2
+            echo "  l2_rqsts.all_demand_data_rd, l2_rqsts.all_demand_miss" >&2
+            cat "${PERF_OUTPUT}" >&2
+            exit 1
+        fi
         ;;
     *)
         echo "error: unsupported CPU vendor: ${CPU_VENDOR:-unknown}" >&2
@@ -44,19 +85,10 @@ case "${CPU_VENDOR}" in
 esac
 
 PERF_EVENTS="${L2_ALL_EVENT}:u,${L2_MISS_EVENT}:u"
-PERF_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/sparseops-fig7-perf.XXXXXX")"
-WORKLOAD_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/sparseops-fig7-workload.XXXXXX")"
-trap 'rm -f "${PERF_OUTPUT}" "${WORKLOAD_OUTPUT}"' EXIT
 
-# Validate both the symbolic event names and access to the hardware counters.
-if ! perf stat --no-big-num -x ';' -e "${PERF_EVENTS}" \
-    -o "${PERF_OUTPUT}" -- true >/dev/null 2>&1; then
+# Final validation (also covers the AMD path).
+if ! events_available "${L2_ALL_EVENT}" "${L2_MISS_EVENT}"; then
     echo "error: perf cannot use events ${PERF_EVENTS}" >&2
-    cat "${PERF_OUTPUT}" >&2
-    exit 1
-fi
-if grep -Eq '<not (supported|counted)>' "${PERF_OUTPUT}"; then
-    echo "error: one or more L2 events are unavailable: ${PERF_EVENTS}" >&2
     cat "${PERF_OUTPUT}" >&2
     exit 1
 fi

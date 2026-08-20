@@ -1,0 +1,5 @@
+ssgetpy
+requests
+tqdm
+matplotlib
+openpyxl

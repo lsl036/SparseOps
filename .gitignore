@@ -23,6 +23,7 @@ script/*.csv
 # data/: track download script only; ignore downloaded SuiteSparse / matrix files
 data/*
 !data/download_datasets.py
+!data/requirements.txt
 
 figs/*/*.txt
 figs/*/*.pdf
