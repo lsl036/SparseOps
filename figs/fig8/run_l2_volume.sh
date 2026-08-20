@@ -149,6 +149,17 @@ import sys
 
 csv_path = sys.argv[1]
 candidates = sys.argv[2:]
+stat_names = ("Sum", "Min", "Max", "Avg")
+
+
+def metric_name(value):
+    value = value.strip()
+    return value[:-5] if value.endswith(" STAT") else value
+
+
+def nonempty(row):
+    return [value for value in row if value]
+
 
 with open(csv_path, newline="", encoding="utf-8", errors="replace") as stream:
     rows = list(csv.reader(stream))
@@ -161,34 +172,53 @@ for index, row in enumerate(rows):
         continue
 
     header = rows[index + 1]
-    available_metrics.extend(
-        value.removesuffix(" STAT") for value in header[1:] if value
+    body = []
+    for values in rows[index + 2 :]:
+        if values and values[0] == "TABLE":
+            break
+        if values:
+            body.append(values)
+
+    header_names = {metric_name(value) for value in nonempty(header)}
+    # LIKWID -O --stats (Intel): rows are metrics, columns are Sum/Min/Max/Avg.
+    row_oriented = header_names.issuperset(stat_names) and not any(
+        metric_name(value) in candidates for value in header[1:] if value
     )
+    if row_oriented:
+        columns = {name: i for i, name in enumerate(header) if name}
+        available_metrics.extend(
+            metric_name(values[0]) for values in body if values and values[0]
+        )
+        for candidate in candidates:
+            for values in body:
+                if not values or metric_name(values[0]) != candidate:
+                    continue
+                try:
+                    stats = {name: values[columns[name]].strip() for name in stat_names}
+                except (KeyError, IndexError):
+                    continue
+                if all(stats[name] for name in stat_names):
+                    print("\t".join((candidate, *(stats[name] for name in stat_names))))
+                    raise SystemExit(0)
+        continue
+
+    # Transposed STAT table: metric names are columns, Sum/Min/Max/Avg are rows.
+    available_metrics.extend(metric_name(value) for value in header[1:] if value)
     for candidate in candidates:
-        target = candidate + " STAT"
-        if target not in header:
+        column = None
+        for offset, value in enumerate(header):
+            if value and metric_name(value) == candidate:
+                column = offset
+                break
+        if column is None:
             continue
 
-        column = header.index(target)
         stats = {}
-        for values in rows[index + 2 :]:
-            if values and values[0] == "TABLE":
-                break
-            if values and values[0] in {"Sum", "Min", "Max", "Avg"}:
-                if column < len(values):
-                    stats[values[0]] = values[column].strip()
-        if all(name in stats for name in ("Sum", "Min", "Max", "Avg")):
-            print(
-                "\t".join(
-                    (
-                        candidate,
-                        stats["Sum"],
-                        stats["Min"],
-                        stats["Max"],
-                        stats["Avg"],
-                    )
-                )
-            )
+        for values in body:
+            if values and values[0] in stat_names and column < len(values):
+                stats[values[0]] = values[column].strip()
+        if all(name in stats and stats[name] for name in stat_names):
+            print("\t".join((candidate, *(stats[name] for name in stat_names))))
             raise SystemExit(0)
 
 print(
@@ -319,6 +349,7 @@ for ((fraction_step = 1; fraction_step <= 11; ++fraction_step)); do
         -g "${LIKWID_GROUP}" \
         --stats \
         -O \
+        -f \
         -o "${LIKWID_OUTPUT}" \
         "${SPGEMM_BIN}" \
         "${MATRIX}" \
