@@ -1,7 +1,7 @@
-# Fig6 - Microbenchmark of Accumulators
+# Fig7 - Microbenchmark of Accumulators
 ### Reproduce:
 ```
-cd $SPARSEOPS_ROOT/figs/fig6/
+cd $SPARSEOPS_ROOT/figs/fig7/
 sh run_accumulator.sh
 ```
 

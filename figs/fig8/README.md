@@ -1,4 +1,4 @@
-# Figure 7 Artifact Evaluation
+# Figure 8 Artifact Evaluation
 
 This experiment sweeps the mixed-accumulator L2 budget from `0.1` to `1.1`
 and records L2-related traffic for `gupta3`. It uses the saved constrained-LSH
@@ -66,11 +66,11 @@ The reference AMD run used GCC 10.3.1, CMake 3.22.0, and Linux
 
 ## 4. Download LIKWID 5.5.1
 
-Skip the download and extraction if `figs/fig7/likwid-5.5.1` is included in
+Skip the download and extraction if `figs/fig8/likwid-5.5.1` is included in
 the artifact:
 
 ```bash
-cd figs/fig7
+cd figs/fig8
 
 curl -fLO https://ftp.fau.de/pub/likwid/likwid-5.5.1.tar.gz
 tar -xzf likwid-5.5.1.tar.gz
@@ -115,7 +115,7 @@ sudo sysctl -w kernel.perf_event_paranoid=1
 
 ## 7. Run the sweep
 
-From `figs/fig7`:
+From `figs/fig8`:
 
 ```bash
 ./run_l2_volume.sh

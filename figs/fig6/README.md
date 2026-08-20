@@ -1,5 +1,5 @@
 
-# Fig8 - 600+ Datasets Results
+# Fig6 - 600+ Datasets Results
 
 ## Download All Matrices
 
@@ -11,7 +11,7 @@ python3 data/download_datasets.py --source all
 ## Run 600+ matrices performance test
 
 ```bash
-cd $SPARSEOPS_ROOT/figs/fig8/
+cd $SPARSEOPS_ROOT/figs/fig6/
 
 python3 $SPARSEOPS_ROOT/script/run_test_spgemm_hc_lsh_list.py $SPARSEOPS_ROOT/runable_datasets.txt --base-dir $SPARSEOPS_ROOT/data --kernel 3 -o runable_datasets_results.csv
 
