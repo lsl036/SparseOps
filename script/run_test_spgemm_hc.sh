@@ -27,6 +27,12 @@ BASE="${BASE_DIR:-${SPARSEOPS_ROOT}/data}"
 CLOSE_PAIRS_DIR="${CLOSE_PAIRS_DIR:-${SPARSEOPS_ROOT}/data/reordering/close_pair}"
 RESULT_CSV="${RESULT_CSV:-$CALLER_DIR/test_spgemm_hc_results.csv}"
 
+# Resolve relative RESULT_CSV against the caller's directory before we cd into BUILD.
+case "${RESULT_CSV}" in
+  /*) ;;
+  *) RESULT_CSV="${CALLER_DIR}/${RESULT_CSV}" ;;
+esac
+
 export SPARSEOPS_ROOT
 
 if [[ ! -f "$DATASETS" ]]; then
