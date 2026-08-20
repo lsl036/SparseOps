@@ -202,7 +202,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=Path,
-        default=script_dir.parent / "fig6" / "hyper_params.xlsx",
+        default=script_dir.parent / "fig7" / "hyper_params.xlsx",
         help="input Excel workbook (default: %(default)s)",
     )
     parser.add_argument(
